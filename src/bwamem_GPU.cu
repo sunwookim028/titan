@@ -4150,7 +4150,7 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
 	cudaEventRecord(stopStage, process_stream);
 	cudaEventSynchronize(stopStage);
 	cudaEventElapsedTime(&lapStage, startStage, stopStage);
-	if(g3_opt->print_times==1) printf("Seeding %d reads in (%05.1f) ms\n", n_seqs, lapStage);
+	if(g3_opt->print_times==1) printf("Seeding %d reads in (%05.1f) ms\n\n", n_seqs, lapStage);
 
 
 
@@ -4282,7 +4282,7 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
 	cudaEventRecord(stopStage, process_stream);
 	cudaEventSynchronize(stopStage);
 	cudaEventElapsedTime(&lapStage, startStage, stopStage);
-	if(g3_opt->print_times==1) printf("Chaining %d reads in (%05.1f) ms\n", n_seqs, lapStage);
+	if(g3_opt->print_times==1) printf("Chaining %d reads in (%05.1f) ms\n\n", n_seqs, lapStage);
 
 	cudaEventRecord(startStage, process_stream);
 
@@ -4495,7 +4495,7 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
 	cudaEventRecord(stopStage, process_stream);
 	cudaEventSynchronize(stopStage);
 	cudaEventElapsedTime(&lapStage, startStage, stopStage);
-	if(g3_opt->print_times==1) printf("Extending %d reads in (%05.1f) ms\n", n_seqs, lapStage);
+	if(g3_opt->print_times==1) printf("Extending %d reads in (%05.1f) ms\n\n", n_seqs, lapStage);
 
 	cudaEventRecord(startStage, process_stream);
 	/////////////////////////////////////////////////////////

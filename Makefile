@@ -216,8 +216,13 @@ help:
 	@echo "example usage:"
 	@echo "make prep [NUM=num_gpus] <- this prepares the experiment environment."
 	@echo "make test <- this runs the experiment."
+	@echo "g3 additional options:"
+	@echo "		-l: print times"
+	@echo "		-b: use baseline"
+	@echo "		-g [NUM]: num of GPUs to use"
+	@echo "		-v [NUM]: verbosity level"
 	@echo ""
-	@echo "Last experiment was on extending gcube to multiple GPUs."
+	@echo "Last experiment was on fixing extending accuracy"
 	@echo "See the commit log for more details."
 
 ECOLI_IDX_PREFIX = ../input/ecoli/GCA_000005845.2_ASM584v2_genomic
@@ -398,7 +403,7 @@ _test:
 clean:
 	rm *sam *out *err
 
-bigclean:
+largeclean:
 	rm -f $(CU_DEBUG_OBJECTS_LINKER) $(CU_OBJECTS_LINKER) $(CU_BASELINE_OBJECTS_LINKER) $(CU_BASELINE_OBJECTS) $(CU_DEBUG_OBJECTS) $(CU_OBJECTS) $(CPP_OBJECTS) $(C_OBJECTS) $(TARGET1) $(TARGET2) $(DEPS_FILE)
 	rm -f $(EVALSUBDIR)/*
 	rm -f temp*
