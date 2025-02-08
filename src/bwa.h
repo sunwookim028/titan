@@ -161,6 +161,7 @@ typedef struct{
     int num_use_gpus;
     int verbosity; // messaging level
     int baseline; // align with baseline options
+    long long print_mask;
 } g3_opt_t;
 
 

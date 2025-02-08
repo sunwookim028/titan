@@ -6,3 +6,23 @@ While modern genomics analysis promise life-saving innovations in personalized t
 In this project, we build GPU software library to accelerate essential computational blocks in modern genomics pipelines. We target specific gold standard algorithms for practical plug-and-play replacement. In this work, we present **G<sup>3</sup>SA**, the first GPU library covering the established **BWA-MEM** short read aligner end-to-end. Using 4 commodity GPU cards, we demonstrate 70x speedup compared to running [BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2/) on a 12-core desktop CPU.
 
 ## Workflow
+Seeding (SMEM seeding, Reseeding) -> Chaining (B-tree chaining, auxiliary steps) -> Extending (Pair generating, SW extending, primary marking, auxiliary steps)
+
+\*auxiliary steps: sorting, filtering-out, reversing, deduplicating, translating.
+
+- Accuracy checkpoints:
+    - Seeding -> Chaining: seed intervals
+    - Chaining aux, SA lookup: translated seed positions
+    - Chaining, B-tree chaining: chain vectors
+    - Chaining -> Extending: filtered chain vectors
+    - Extending, Pair generating (1/2): generated pair metadata (positions)
+    - Extending, Pair generating (2/2): allocated memory, generated pairs
+    - Extending, @@
+
+- Accuracy tests: **(scripts)**
+
+
+## Implementation details
+- software modules: frontend (parsing, scheduling), alignment kernels, ADT / memory manip. functions.
+- how to use (scripts / individual library function prototypes): @@.
+- missing features: paired mapping, full SAM generation including auxiliary fields, features in bwa-mem v17+, @@.

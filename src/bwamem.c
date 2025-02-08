@@ -79,6 +79,7 @@ g3_opt_t *g3_opt_init()
     o->num_use_gpus = 1;
     o->baseline = 0;
     o->verbosity = 0;
+    o->print_mask = 0xFFFFFFFFFFFFFFFFLL;
 }
 
 mem_opt_t *mem_opt_init()

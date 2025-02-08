@@ -2,6 +2,8 @@
 #define PRINTINTERMEDIATES_CUH
 #include "bwa.h"
 
+#define BIT(n) (1LL << (n))
+
 // Seeding stage.
 #define SMINTV      0   /* bwtintv_t,   smem_aux_t */
 #define CHINTV      1   /* bwtintv_t,   smem_aux_t */
@@ -20,6 +22,10 @@
 #define ANALN       12  /* mem_aln_t, mem_aln_v */
 
 #define FLATINTV      13   /* bwtintv_t,   smem_aux_t */
+
+#define STEP_TIME 50
+#define STAGE_TIME 51
+#define ADDITIONAL 60
 
 // format: [ID readID] qbeg qend num_hits sa_k
 __global__ void printIntv(smem_aux_t *d_intvvecs, int readID, int type);
