@@ -10,6 +10,7 @@ Seeding (SMEM seeding, Reseeding) -> Chaining (B-tree chaining, auxiliary steps)
 
 \*auxiliary steps: sorting, filtering-out, reversing, deduplicating, translating.
 
+test 
 - Accuracy checkpoints:
     - Seeding -> Chaining: seed intervals
     - Chaining aux, SA lookup: translated seed positions
