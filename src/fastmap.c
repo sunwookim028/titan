@@ -110,7 +110,7 @@ int main_mem(int argc, char *argv[])
 		else if (c == 'm') opt->max_matesw = atoi(optarg), opt0.max_matesw = 1;
 		else if (c == 's') opt->split_width = atoi(optarg), opt0.split_width = 1;
 		else if (c == 'G') opt->max_chain_gap = atoi(optarg), opt0.max_chain_gap = 1;
-		else if (c == 'g') g3_opt->num_use_gpus = atoi(optarg), fprintf(stderr, "INPUT ARG: USE %d GPUS\n", num_use_gpus);
+		else if (c == 'g') g3_opt->num_use_gpus = atoi(optarg);
 		else if (c == 'l') g3_opt->print_mask = atoll(optarg);
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
 		else if (c == 'o' || c == 'f'){

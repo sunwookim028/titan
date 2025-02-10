@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 
 def func(filename):
     num = 0;

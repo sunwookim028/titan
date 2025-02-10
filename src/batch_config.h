@@ -17,7 +17,7 @@
 
 // Constant values
 #define MAX_LEN_READ 320 // max. length of input short read
-#define MB_MAX_COUNT 1000 // larger batch (e.g. 131072 doesn't seem clearly beneficial)       // max number of reads
+#define MB_MAX_COUNT 64000 // larger batch (e.g. 131072 doesn't seem clearly beneficial)       // max number of reads
 #define AVG_NUM_SEEDS 8
 
 

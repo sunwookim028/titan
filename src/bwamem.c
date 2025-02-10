@@ -42,6 +42,8 @@
 #include "ksort.h"
 #include "utils.h"
 
+#include "bwa.h"
+
 #ifdef USE_MALLOC_WRAPPERS
 #  include "malloc_wrap.h"
 #endif
@@ -79,7 +81,7 @@ g3_opt_t *g3_opt_init()
     o->num_use_gpus = 1;
     o->baseline = 0;
     o->verbosity = 0;
-    o->print_mask = 0xFFFFFFFFFFFFFFFFLL;
+    o->print_mask = BIT(STAGE_TIME) | BIT(ADDITIONAL) | BIT(ANALN);
 }
 
 mem_opt_t *mem_opt_init()

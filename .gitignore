@@ -3,3 +3,4 @@ titan
 *.sam
 *.out
 *.err
+*.proc*

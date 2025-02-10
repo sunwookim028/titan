@@ -12,13 +12,13 @@ Seeding (SMEM seeding, Reseeding) -> Chaining (B-tree chaining, auxiliary steps)
 
 test 
 - Accuracy checkpoints:
-    - Seeding -> Chaining: seed intervals
-    - Chaining aux, SA lookup: translated seed positions
-    - Chaining, B-tree chaining: chain vectors
-    - Chaining -> Extending: filtered chain vectors
-    - Extending, Pair generating (1/2): generated pair metadata (positions)
-    - Extending, Pair generating (2/2): allocated memory, generated pairs
-    - Extending, @@
+    - [ ] Seeding -> Chaining: seed intervals
+    - [ ] Chaining aux, SA lookup: translated seed positions
+    - [ ] Chaining, B-tree chaining: chain vectors
+    - [ ] Chaining -> Extending: filtered chain vectors
+    - [ ] Extending, Pair generating (1/2): generated pair metadata (positions)
+    - [ ] Extending, Pair generating (2/2): allocated memory, generated pairs
+    - [ ] Extending, @@
 
 - Accuracy tests: **(scripts)**
 
