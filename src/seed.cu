@@ -726,9 +726,11 @@ __global__ void reseedV2(
         // reseed
         min_seed_intv = smem->x[2] + 1;
         pivot_pos = (PM(smem) + PN(smem) + 1) >> 1;
+        /*
         if(pivot_pos > 250){
             printf("pivot_pos %d\n", pivot_pos);
         }
+        */
         if(read[pivot_pos] >=4)
         {
             continue;

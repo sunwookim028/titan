@@ -4249,19 +4249,20 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 
     cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     if(g3_opt->baseline){
-        /*
+#if 1
 #define SEEDCHAINING_CHAIN_BLOCKDIMX 256
-SEEDCHAINING_chain_kernel <<< n_seqs, SEEDCHAINING_CHAIN_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
-proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
-proc->d_chains,	// output
-proc->d_buffer_pools);
-         */
+        SEEDCHAINING_chain_kernel <<< n_seqs, SEEDCHAINING_CHAIN_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+                proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
+                proc->d_chains,	// output
+                proc->d_buffer_pools);
+#else
         Chaining 
             <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
 
                     proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
                     proc->d_chains,	// output
                     proc->d_buffer_pools);
+#endif
     } else{
         Chaining 
             <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(

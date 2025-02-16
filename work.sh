@@ -50,6 +50,7 @@ case "$arg2" in
         ARGS="mem\
             -g 1\
             $printopt\
+            -b\
             -o $NAME.sam\
             ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
             ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
