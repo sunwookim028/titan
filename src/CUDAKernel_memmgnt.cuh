@@ -9,6 +9,10 @@ typedef struct
 	unsigned end_offset;		// the max offset of the chunk
 } CUDAKernel_mem_info;
 
+// reset buffer pools before processing a new batch.
+__host__
+void reset_pools(void *d_buffer_pools);
+
 // initialize 32 chunks of memory
 extern __host__ void* CUDA_BufferInit();
 // reset buffer pools

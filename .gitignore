@@ -4,3 +4,5 @@ titan
 *.out
 *.err
 *.proc*
+ecoli.*
+*bp.*

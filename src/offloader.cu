@@ -126,6 +126,7 @@ static void push(transfer_data_t *tran, superbatch_data_t *loadedinput, int *pus
 
 static void pull(transfer_data_t *tran, int *pull_counter, std::mutex *pull_m)
 {
+    int k = 0;
     int pull_offset;
     int pull_count = tran->n_seqs;
 

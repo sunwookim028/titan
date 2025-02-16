@@ -77,11 +77,11 @@ g3_opt_t *g3_opt_init()
 {
     g3_opt_t *o;
     o = calloc(1, sizeof(g3_opt_t));
-    o->print_times = 0;
     o->num_use_gpus = 1;
     o->baseline = 0;
     o->verbosity = 0;
-    o->print_mask = BIT(STAGE_TIME) | BIT(ADDITIONAL) | BIT(ANALN);
+    o->print_mask = BIT(STAGE_TIME) | BIT(ADDITIONAL);
+    return o;
 }
 
 mem_opt_t *mem_opt_init()

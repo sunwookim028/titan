@@ -175,11 +175,7 @@ __global__ void printAln(mem_aln_v *d_alnvecs, int readID, int type)
 #define BAM2OP(bam)     ((char)("MIDSH"[(int)bam&0xf])) 
     for(mem_aln_t *aln = d_alnvecs[readID].a;\
             aln < d_alnvecs[readID].a + d_alnvecs[readID].n; aln++) {
-        /*
-        printf("[%s %d] %d %ld ", printidentifiers[type], readID, aln->rid,\
-                aln->pos + 1); // 0- => 1-based
-        */
-        printf("%d %d %ld ", readID+1, aln->rid, aln->pos+1);
+        printf("%d %d %ld ", readID+1, aln->rid, aln->pos+1); //1-based rpos
         for(uint32_t *bam = aln->cigar; bam < aln->cigar + aln->n_cigar;\
                 bam++) {
             printf("%d%c", BAM2LEN(*bam), BAM2OP(*bam));

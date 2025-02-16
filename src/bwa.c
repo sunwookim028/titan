@@ -384,6 +384,7 @@ char *bwa_idx_infer_prefix(const char *hint)
 		return prefix;
 	} else {
 		strcpy(prefix + l_hint, ".bwt");
+        fprintf(stderr, "prefix2 %s\n", prefix);
 		if ((fp = fopen(prefix, "rb")) == 0) {
 			free(prefix);
 			return 0;

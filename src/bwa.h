@@ -28,8 +28,24 @@
 #ifndef BWA_H_
 #define BWA_H_
 
-#define BIT(n) (1LL << (n))
+// Print flag bitmasks.
+#define BIT(n) (1L << (n))
 
+#define STAGE_TIME 0
+#define STEP_TIME 1
+
+/* Seed, Reseed intervals */
+#define PRINTSEEDING 2 
+/* Sampled seeds, sorted -, chains, sorted -, filtered - */
+#define PRINTCHAINING 3 
+/* Ext. pairs, ext. regions, filtered -, sorted -, 
+ * global ext. pairs, g. ext. regions, rpos & cigar results */
+#define PRINTEXTENDING 4 
+
+#define ADDITIONAL 5
+
+
+// macros for internal usage.
 // Seeding stage.
 #define SMINTV      0   /* bwtintv_t,   smem_aux_t */
 #define CHINTV      1   /* bwtintv_t,   smem_aux_t */
@@ -48,10 +64,6 @@
 #define ANALN       12  /* mem_aln_t, mem_aln_v */
 
 #define FLATINTV      13   /* bwtintv_t,   smem_aux_t */
-
-#define STEP_TIME 50
-#define STAGE_TIME 51
-#define ADDITIONAL 60
 
 #include <stdint.h>
 #include "bntseq.h"
@@ -182,11 +194,10 @@ typedef struct {
 } mem_opt_t;
 
 typedef struct{
-    int print_times;
     int num_use_gpus;
     int verbosity; // messaging level
     int baseline; // align with baseline options
-    long long print_mask;
+    long int print_mask;
 } g3_opt_t;
 
 
@@ -316,7 +327,7 @@ typedef struct {
 	mem_pestat_t* h_pes0;	// pes0 on host for paired-end stats
 	kmers_bucket_t* d_kmerHashTab;
     // pointers that will change each batch (being swapped between transfer and process)
-    fmIndex *devFmIndex; //Added
+    fmIndex *d_fmIndex; //Added
 
         // reads on device
 	int n_seqs;			// number of reads on device

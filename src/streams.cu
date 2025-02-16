@@ -257,7 +257,7 @@ fprintf(stderr, "transferred sentinel index = %ld to device\n", *(idx->sentinelI
     cudaMemcpy(deviceFmIndex, &hostFmIndex, sizeof(fmIndex), cudaMemcpyHostToDevice);
 
     // output
-    process_instance->devFmIndex = deviceFmIndex;
+    process_instance->d_fmIndex = deviceFmIndex;
 }
 
 void newProcess(
@@ -453,32 +453,6 @@ void CUDATransferSamOut(transfer_data_t *transfer_data){
 }
 
 
-
-void resetProcess(process_data_t *process_data){
-	// reset memory management
-    void *h_pools[NBUFFERPOOLS];
-	gpuErrchk( cudaMemcpy(h_pools, process_data->d_buffer_pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyDeviceToHost) );
-
-	// reset memory info at the head of each pool
-	CUDAKernel_mem_info pool_info;		// intermediate data on host
-	for (int i = 0; i < NBUFFERPOOLS; i++){
-		// find address of the start of the pool
-		void* d_pool_addr = ((void**)h_pools)[i];
-		// set base offset
-		pool_info.current_offset = sizeof(CUDAKernel_mem_info);
-		// set limit of the pool
-		pool_info.end_offset = (unsigned)POOLSIZE;
-		// copy d_pool_info to the start of the pool
-		gpuErrchk( cudaMemcpy(d_pool_addr, &pool_info, sizeof(CUDAKernel_mem_info), cudaMemcpyHostToDevice) );
-	}
-
-	// reset intermediate data
-		// reset seeds
-	gpuErrchk( cudaMemset(process_data->d_Nseeds, 0, sizeof(int)) );
-		// reset sam size on device
-	gpuErrchk( cudaMemset(process_data->d_seq_sam_size, 0, sizeof(int)) );
-
-}
 
 void resetTransfer(transfer_data_t *transfer_data){
 	// reset name, seq, comment, qual sizes

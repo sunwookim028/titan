@@ -20,7 +20,7 @@
 #include <fstream>
 #include <chrono>
 using namespace std::chrono;
-#include <fstream>
+#include <iostream>
 using namespace std;
 
 extern char *printidentifiers[];
@@ -1751,6 +1751,7 @@ __global__ void SEEDCHAINING_flatten_mems(
 }
 
 
+#if 0
 /* this kernel is to filter out dups  */
 #define SEEDCHAINING_MAX_N_MEM 320
 __global__ void SEEDCHAINING_filter_seeds_kernel2(
@@ -1869,6 +1870,7 @@ __global__ void SEEDCHAINING_filter_seeds_kernel2(
         new_a[seedID] = p;	// write to global mem
     }
 }
+#endif
 
 /* this kernel is to count the actual number of seeds
    also spread out the seeds inside the same bwt interval
@@ -4019,8 +4021,18 @@ __global__ void SAMGEN_concatenate_kernel(
 /*  main function for bwamem in GPU 
     return to seqs.sam
  */
-void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
+void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 {
+    cudaEvent_t step_start, step_stop;
+    float stage_lap;
+    float sum_lap;
+    float step_lap;
+
+    void *d_temp_storage;
+    size_t temp_storage_size;
+    int n_seqs, num_seeds_to_extend;
+
+    // Configure the GPU to use.
     if(cudaSetDevice(gpuid) != cudaSuccess){
         std::cerr << "bwa_align: cudaSetDevice failed" << std::endl;
         return;
@@ -4030,51 +4042,16 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
         }
     }
 
-    int n_seqs, num_seeds_to_extend;
-
-
-    if((n_seqs = process_data->n_seqs) > 0){
+    // Initialize variables for aligning this batch of read sequences.
+    if((n_seqs = proc->n_seqs) > 0){
         if(g3_opt->print_mask & BIT(ADDITIONAL)){
             std::cerr << "Aligning " << n_seqs << " seqs" << std::endl;
         }
     } else{
         return;
     }
-
-    resetProcess(process_data);
-
-    // options
-    auto d_opt = process_data->d_opt;
-    // index
-    auto d_bwt = process_data->d_bwt;
-    auto d_bns = process_data->d_bns;
-    auto d_pac = process_data->d_pac;
-    auto d_kmerHashTab = process_data->d_kmerHashTab;
-    // reads
-    auto d_seqs = process_data->d_seqs;
-    auto d_seq_sam_ptr = process_data->d_seq_sam_ptr;
-    auto d_seq_sam_size = process_data->d_seq_sam_size;
-    // intermediate data
-    auto d_aux = process_data->d_aux;
-    auto d_seq_seeds = process_data->d_seq_seeds;
-    auto d_chains = process_data->d_chains;
-    auto d_regs = process_data->d_regs;
-    auto d_seed_records = process_data->d_seed_records;
-    auto d_Nseeds = process_data->d_Nseeds;
-    auto d_alns = process_data->d_alns;
-    auto d_sortkeys_in = process_data->d_sortkeys_in;
-    auto d_seqIDs_in = process_data->d_seqIDs_in;
-    auto d_sortkeys_out = process_data->d_sortkeys_out;
-    auto d_seqIDs_out = process_data->d_seqIDs_out;
-    auto deviceFmIndex = process_data->devFmIndex;
-    // system stuffs
-    void *d_buffer_pools = process_data->d_buffer_pools;
-    cudaStream_t process_stream = *((cudaStream_t*)process_data->CUDA_stream);
-
-    cudaEvent_t step_start, step_stop;
-    float stage_lap;
-    float lap, sum_lap;
-    float step_lap;
+    reset_pools(proc->d_buffer_pools);
+	gpuErrchk( cudaMemset(proc->d_Nseeds, 0, sizeof(int)) );
 
     cudaEventCreate(&step_start);
     cudaEventCreate(&step_stop);
@@ -4085,10 +4062,10 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
     // Seeding -> SMEM finding (1/2)
     if(g3_opt->baseline){
         sum_lap = 0;
-        cudaEventRecord(step_start, process_stream);
+        cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
         PREPROCESS_convert_bit_encoding_kernel 
-            <<< n_seqs, 32, 0, process_stream >>> (d_seqs);
-        cudaEventRecord(step_stop, process_stream);
+            <<< n_seqs, 32, 0, *(cudaStream_t*)proc->CUDA_stream >>> (proc->d_seqs);
+        cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
         CudaEventSynchronize(step_stop);
         cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4098,14 +4075,14 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
         }
         sum_lap += step_lap;
 
-        cudaEventRecord(step_start, process_stream);
+        cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
         MEMFINDING_collect_intv_kernel 
-            <<< n_seqs, 320, 512, process_stream >>> (
-                    d_opt, d_bwt, d_seqs,
-                    d_aux,	// output
-                    d_kmerHashTab,
-                    d_buffer_pools);
-        cudaEventRecord(step_stop, process_stream);
+            <<< n_seqs, 320, 512, *(cudaStream_t*)proc->CUDA_stream >>> (
+                    proc->d_opt, proc->d_bwt, proc->d_seqs,
+                    proc->d_aux,	// output
+                    proc->d_kmerHashTab,
+                    proc->d_buffer_pools);
+        cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
         CudaEventSynchronize(step_stop);
         cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4115,10 +4092,10 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
         }
         sum_lap += step_lap;
 
-        cudaEventRecord(step_start, process_stream);
-        filterSeeds <<< n_seqs, WARPSIZE, 0, process_stream >>>(
-                d_opt, d_aux);
-        cudaEventRecord(step_stop, process_stream);
+        cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+        filterSeeds <<< n_seqs, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+                proc->d_opt, proc->d_aux);
+        cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
         CudaEventSynchronize(step_stop);
         cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4134,11 +4111,11 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
         }
         stage_lap += sum_lap;
     } else{
-        cudaEventRecord(step_start, process_stream);
-        preseedAndFilterV2 <<< n_seqs, 320, 0, process_stream >>> (
-                deviceFmIndex,
-                d_opt, d_seqs, d_aux, d_kmerHashTab, d_buffer_pools);
-        cudaEventRecord(step_stop, process_stream);
+        cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+        preseedAndFilterV2 <<< n_seqs, 320, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+                proc->d_fmIndex,
+                proc->d_opt, proc->d_seqs, proc->d_aux, proc->d_kmerHashTab, proc->d_buffer_pools);
+        cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
 
         CudaEventSynchronize(step_stop);
@@ -4150,23 +4127,23 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
         stage_lap += step_lap;
     }
 
-    if(g3_opt->print_mask & BIT(SMINTV)){
+    if(g3_opt->print_mask & BIT(PRINTSEEDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printIntv<<<1, WARPSIZE, 0, process_stream>>>(d_aux, readID, SMINTV);
-            FINALIZE(printidentifiers[SMINTV], process_stream);
+            printIntv<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_aux, readID, SMINTV);
+            FINALIZE(printidentifiers[SMINTV], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
     // Seeding -> Reseeding (2/2)
 #ifndef BMG
     sum_lap = 0;
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     reseedV2 <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 
-        : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-                deviceFmIndex, d_opt, d_seqs, d_aux, d_kmerHashTab, 
-                d_buffer_pools, n_seqs);
-    cudaEventRecord(step_stop, process_stream);
+        : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+                proc->d_fmIndex, proc->d_opt, proc->d_seqs, proc->d_aux, proc->d_kmerHashTab, 
+                proc->d_buffer_pools, n_seqs);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4177,11 +4154,11 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
     sum_lap += step_lap;
 
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     reseedLastRound <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 
-        : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-                deviceFmIndex, d_opt, d_seqs, d_aux, d_kmerHashTab, n_seqs);
-    cudaEventRecord(step_stop, process_stream);
+        : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+                proc->d_fmIndex, proc->d_opt, proc->d_seqs, proc->d_aux, proc->d_kmerHashTab, n_seqs);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4197,11 +4174,11 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
     }
     stage_lap += sum_lap;
 
-    if(g3_opt->print_mask & BIT(CHINTV)){
+    if(g3_opt->print_mask & BIT(PRINTSEEDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printIntv<<<1, WARPSIZE, 0, process_stream>>>(d_aux, readID, CHINTV);
-            FINALIZE(printidentifiers[CHINTV], process_stream);
+            printIntv<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_aux, readID, CHINTV);
+            FINALIZE(printidentifiers[CHINTV], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 #endif
@@ -4219,12 +4196,12 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
     // Chaining -> B-tree chaining (1/1)
     sum_lap = 0;
 
-    cudaEventRecord(step_start, process_stream);
-    SeedTranslate <<< n_seqs, 128, 0, process_stream >>> (
-            d_opt, d_bwt, d_bns, d_seqs, d_aux,
-            d_seq_seeds,
-            d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    SeedTranslate <<< n_seqs, 128, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+            proc->d_opt, proc->d_bwt, proc->d_bns, proc->d_seqs, proc->d_aux,
+            proc->d_seq_seeds,
+            proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4234,25 +4211,25 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(CHSEED_)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printSeed<<<1, WARPSIZE, 0, process_stream>>>(d_seq_seeds, readID, CHSEED_);
-            FINALIZE(printidentifiers[CHSEED_], process_stream);
+            printSeed<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seq_seeds, readID, CHSEED_);
+            FINALIZE(printidentifiers[CHSEED_], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     SEEDCHAINING_sortSeeds_low_kernel 
-        <<< n_seqs, SORTSEEDSLOW_BLOCKDIMX, 0, process_stream >>> (
-                d_seq_seeds,
-                d_buffer_pools);
+        <<< n_seqs, SORTSEEDSLOW_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+                proc->d_seq_seeds,
+                proc->d_buffer_pools);
 
     SEEDCHAINING_sortSeeds_high_kernel 
-        <<< n_seqs, SORTSEEDSHIGH_BLOCKDIMX, 0, process_stream >>> (
-                d_seq_seeds,
-                d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+        <<< n_seqs, SORTSEEDSHIGH_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+                proc->d_seq_seeds,
+                proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4262,38 +4239,38 @@ void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt)
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(CHSEED)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printSeed<<<1, WARPSIZE, 0, process_stream>>>(d_seq_seeds, readID, CHSEED);
-            FINALIZE(printidentifiers[CHSEED], process_stream);
+            printSeed<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seq_seeds, readID, CHSEED);
+            FINALIZE(printidentifiers[CHSEED], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     if(g3_opt->baseline){
         /*
 #define SEEDCHAINING_CHAIN_BLOCKDIMX 256
-SEEDCHAINING_chain_kernel <<< n_seqs, SEEDCHAINING_CHAIN_BLOCKDIMX, 0, process_stream >>> (
-d_opt, d_bns, d_seqs, d_seq_seeds,
-d_chains,	// output
-d_buffer_pools);
+SEEDCHAINING_chain_kernel <<< n_seqs, SEEDCHAINING_CHAIN_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
+proc->d_chains,	// output
+proc->d_buffer_pools);
          */
         Chaining 
-            <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
+            <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
 
-                    d_opt, d_bns, d_seqs, d_seq_seeds,
-                    d_chains,	// output
-                    d_buffer_pools);
+                    proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
+                    proc->d_chains,	// output
+                    proc->d_buffer_pools);
     } else{
         Chaining 
-            <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
+            <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
 
-                    d_opt, d_bns, d_seqs, d_seq_seeds,
-                    d_chains,	// output
-                    d_buffer_pools);
+                    proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
+                    proc->d_chains,	// output
+                    proc->d_buffer_pools);
     }
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4303,20 +4280,20 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(CHCHAIN)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printChain<<<1, WARPSIZE, 0, process_stream>>>(d_chains, readID, CHCHAIN);
-            FINALIZE(printidentifiers[CHCHAIN], process_stream);
+            printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, CHCHAIN);
+            FINALIZE(printidentifiers[CHCHAIN], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     CHAINFILTERING_sortChains_kernel 
         <<< n_seqs, SORTCHAIN_BLOCKDIMX, 
-        MAX_N_CHAIN*2*sizeof(uint16_t)+sizeof(mem_chain_t**), process_stream>>> 
-            (d_chains, d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+        MAX_N_CHAIN*2*sizeof(uint16_t)+sizeof(mem_chain_t**), *(cudaStream_t*)proc->CUDA_stream>>> 
+            (proc->d_chains, proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4326,12 +4303,12 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    cudaEventRecord(step_start, process_stream);
-    CHAINFILTERING_filter_kernel <<< n_seqs, CHAIN_FLT_BLOCKSIZE, MAX_N_CHAIN*(3*sizeof(uint16_t)+sizeof(uint8_t)), process_stream >>> (
-            d_opt, 
-            d_chains, 	// input and output
-            d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    CHAINFILTERING_filter_kernel <<< n_seqs, CHAIN_FLT_BLOCKSIZE, MAX_N_CHAIN*(3*sizeof(uint16_t)+sizeof(uint8_t)), *(cudaStream_t*)proc->CUDA_stream >>> (
+            proc->d_opt, 
+            proc->d_chains, 	// input and output
+            proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4342,22 +4319,22 @@ d_buffer_pools);
     sum_lap += step_lap;
 
 #if 0 // this code is anyway dead for short (<700bp) reads.
-    if (g3_opt->verbosity>=4) fprintf(stderr, "[M::%-25s] **** [CHAIN FILTERING]: Launch kernel mem_flt_chained_seeds ...\n", __func__);
-    cudaEventRecord(step_start, process_stream);
-    CHAINFILTERING_flt_chained_seeds_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-            d_opt, d_bns, d_pac,
-            d_seqs, d_chains, 	// input and output
-            n_seqs, d_buffer_pools);
+    if (g3_opt->verbosity>=4) fprintf(stderr, "[M::%-25s] **** [CHAIN FILTERING]: Launch kernel mem_flt_chaineproc->d_seeds ...\n", __func__);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    CHAINFILTERING_flt_chaineproc->d_seeds_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+            proc->d_opt, proc->d_bns, proc->d_pac,
+            proc->d_seqs, proc->d_chains, 	// input and output
+            n_seqs, proc->d_buffer_pools);
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&lap, step_start, step_stop);
     if(g3_opt->print_times==1) printf("Filtered2 chains from %d reads in (%05.1f) ms\n", n_seqs, lap);
 #endif
 
-    if(g3_opt->print_mask & BIT(SWCHAIN)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printChain<<<1, WARPSIZE, 0, process_stream>>>(d_chains, readID, SWCHAIN);
-            FINALIZE(printidentifiers[SWCHAIN], process_stream);
+            printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, SWCHAIN);
+            FINALIZE(printidentifiers[SWCHAIN], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
@@ -4380,12 +4357,12 @@ d_buffer_pools);
     sum_lap = 0;
 
 
-    cudaEventRecord(step_start, process_stream);
-    SWSeed <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-            d_chains, d_regs, d_seed_records, d_Nseeds, n_seqs,
-            d_buffer_pools
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    SWSeed <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+            proc->d_chains, proc->d_regs, proc->d_seed_records, proc->d_Nseeds, n_seqs,
+            proc->d_buffer_pools
             );
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4396,23 +4373,23 @@ d_buffer_pools);
     sum_lap += step_lap;
 
 
-    cudaEventRecord(step_start, process_stream);
-    gpuErrchk2( cudaMemcpyAsync(&num_seeds_to_extend, d_Nseeds, sizeof(int), cudaMemcpyDeviceToHost, process_stream) );
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    gpuErrchk2( cudaMemcpyAsync(&num_seeds_to_extend, proc->d_Nseeds, sizeof(int), cudaMemcpyDeviceToHost, *(cudaStream_t*)proc->CUDA_stream) );
     if(g3_opt->print_mask & BIT(ADDITIONAL)){
         std::cerr << "Extension target: total " << num_seeds_to_extend << " seeds" 
             << std::endl;
     }
     if (num_seeds_to_extend == 0){
-        process_data->n_processed += process_data->n_seqs;
+        proc->n_processed += proc->n_seqs;
         return;
     }
 
-    ExtendingPairGenerate <<< ceil((float)num_seeds_to_extend/32.0), 32, 0, process_stream >>> (
-            d_opt, d_bns, d_pac, d_seqs,
-            d_chains, d_regs, d_seed_records, d_Nseeds,
-            n_seqs, d_buffer_pools
+    ExtendingPairGenerate <<< ceil((float)num_seeds_to_extend/32.0), 32, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+            proc->d_opt, proc->d_bns, proc->d_pac, proc->d_seqs,
+            proc->d_chains, proc->d_regs, proc->d_seed_records, proc->d_Nseeds,
+            n_seqs, proc->d_buffer_pools
             );
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4422,30 +4399,30 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(SWPAIR)){
-        printPair<<<1, WARPSIZE, 0, process_stream>>>(d_seed_records, num_seeds_to_extend, SWPAIR);
-        FINALIZE(printidentifiers[SWPAIR], process_stream);
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
+        printPair<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seed_records, num_seeds_to_extend, SWPAIR);
+        FINALIZE(printidentifiers[SWPAIR], *(cudaStream_t*)proc->CUDA_stream);
     }
 
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     if(g3_opt->baseline){
-        LocalExtending_baseline <<< num_seeds_to_extend, WARPSIZE, 0, process_stream >>> (
-                d_opt,
-                d_chains, 		// input chains
-                d_seed_records,
-                d_regs,		// output array
-                d_Nseeds);
+        LocalExtending_baseline <<< num_seeds_to_extend, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+                proc->d_opt,
+                proc->d_chains, 		// input chains
+                proc->d_seed_records,
+                proc->d_regs,		// output array
+                proc->d_Nseeds);
     } else{
-        LocalExtending <<< num_seeds_to_extend, WARPSIZE, 0, process_stream >>> (
-                d_opt,
-                d_chains, 		// input chains
-                d_seed_records,
-                d_regs,		// output array
-                d_Nseeds);
+        LocalExtending <<< num_seeds_to_extend, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+                proc->d_opt,
+                proc->d_chains, 		// input chains
+                proc->d_seed_records,
+                proc->d_regs,		// output array
+                proc->d_Nseeds);
         // TODO perhaps utilize agatha
     }
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4455,21 +4432,21 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(SWREG_)){
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printReg<<<1, WARPSIZE, 0, process_stream>>>(d_regs, readID, SWREG_);
-            FINALIZE(printidentifiers[SWREG_], process_stream);
+            printReg<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_regs, readID, SWREG_);
+            FINALIZE(printidentifiers[SWREG_], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
 
-    cudaEventRecord(step_start, process_stream); // remove duplicates
-    ExtensionFiltering <<< n_seqs, 320, 0, process_stream >>> (
-            d_opt, d_bns,
-            d_chains, d_regs
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream); // remove duplicates
+    ExtensionFiltering <<< n_seqs, 320, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
+            proc->d_opt, proc->d_bns,
+            proc->d_chains, proc->d_regs
             );
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4479,18 +4456,18 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(SWREG)){
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printReg<<<1, WARPSIZE, 0, process_stream>>>(d_regs, readID, SWREG);
-            FINALIZE(printidentifiers[SWREG], process_stream);
+            printReg<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_regs, readID, SWREG);
+            FINALIZE(printidentifiers[SWREG], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
 
-    cudaEventRecord(step_start, process_stream);
-    FINALIZEALN_mark_primary_kernel <<< n_seqs, 256, 0, process_stream >>> (d_opt, d_regs, d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    FINALIZEALN_mark_primary_kernel <<< n_seqs, 256, 0, *(cudaStream_t*)proc->CUDA_stream >>> (proc->d_opt, proc->d_regs, proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4501,10 +4478,10 @@ d_buffer_pools);
     sum_lap += step_lap;
 
 
-    cudaEventRecord(step_start, process_stream);
-    FINALIZEALN_reorderAlns_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-            d_regs, n_seqs, d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    FINALIZEALN_reorderAlns_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+            proc->d_regs, n_seqs, proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4514,11 +4491,11 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(ANREG)){
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printReg<<<1, WARPSIZE, 0, process_stream>>>(d_regs, readID, ANREG);
-            FINALIZE(printidentifiers[ANREG], process_stream);
+            printReg<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_regs, readID, ANREG);
+            FINALIZE(printidentifiers[ANREG], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
@@ -4533,14 +4510,14 @@ d_buffer_pools);
     sum_lap = 0;
 
 
-    cudaEventRecord(step_start, process_stream);
-    cudaMemsetAsync(d_Nseeds, 0, sizeof(int), process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    cudaMemsetAsync(proc->d_Nseeds, 0, sizeof(int), *(cudaStream_t*)proc->CUDA_stream);
 
-    FINALIZEALN_preprocessing1_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-            d_regs, d_alns, d_seed_records, d_Nseeds,
-            d_buffer_pools);
-    gpuErrchk2( cudaMemcpyAsync(&num_seeds_to_extend, d_Nseeds, sizeof(int), cudaMemcpyDeviceToHost, process_stream) );
-    cudaEventRecord(step_stop, process_stream);
+    FINALIZEALN_preprocessing1_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+            proc->d_regs, proc->d_alns, proc->d_seed_records, proc->d_Nseeds,
+            proc->d_buffer_pools);
+    gpuErrchk2( cudaMemcpyAsync(&num_seeds_to_extend, proc->d_Nseeds, sizeof(int), cudaMemcpyDeviceToHost, *(cudaStream_t*)proc->CUDA_stream) );
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4562,15 +4539,15 @@ d_buffer_pools);
     }
 
 
-    cudaEventRecord(step_start, process_stream);
-    FINALIZEALN_preprocessing2_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-            d_opt, d_seqs,
-            d_pac, d_bns,
-            d_regs, d_alns, d_seed_records, num_seeds_to_extend,
-            d_sortkeys_in,	// sortkeys_in = bandwidth * rlen
-            d_seqIDs_in,
-            d_buffer_pools);
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    FINALIZEALN_preprocessing2_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+            proc->d_opt, proc->d_seqs,
+            proc->d_pac, proc->d_bns,
+            proc->d_regs, proc->d_alns, proc->d_seed_records, num_seeds_to_extend,
+            proc->d_sortkeys_in,	// sortkeys_in = bandwidth * rlen
+            proc->d_seqIDs_in,
+            proc->d_buffer_pools);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4581,10 +4558,10 @@ d_buffer_pools);
     sum_lap += step_lap;
 
 
-    cudaEventRecord(step_start, process_stream);
-    FINALIZEALN_reverseSeq_kernel <<< num_seeds_to_extend, WARPSIZE, 0, process_stream >>> (d_seed_records, d_alns, d_buffer_pools);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    FINALIZEALN_reverseSeq_kernel <<< num_seeds_to_extend, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>> (proc->d_seed_records, proc->d_alns, proc->d_buffer_pools);
     // reverse query and target if aln position is on reverse strand
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4595,19 +4572,19 @@ d_buffer_pools);
     sum_lap += step_lap;
 
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
 
-    void *d_temp_storage = NULL;
-    size_t temp_storage_size = 0;
+    d_temp_storage = NULL;
+    temp_storage_size = 0;
     // determine temporary storage requirement
-    gpuErrchk2( cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_size, d_sortkeys_in, d_sortkeys_out, d_seqIDs_in, d_seqIDs_out, num_seeds_to_extend, 0, 8*sizeof(int), process_stream) );
+    gpuErrchk2( cub::DeviceRadixSort::SortPairs(d_temp_storage, temp_storage_size, proc->d_sortkeys_in, proc->d_sortkeys_out, proc->d_seqIDs_in, proc->d_seqIDs_out, num_seeds_to_extend, 0, 8*sizeof(int), *(cudaStream_t*)proc->CUDA_stream) );
     // Allocate temporary storage
     gpuErrchk2( cudaMalloc(&d_temp_storage, temp_storage_size) );
     // perform radix sort
-    gpuErrchk2( cub::DeviceRadixSort::SortPairsDescending(d_temp_storage, temp_storage_size, d_sortkeys_in, d_sortkeys_out, d_seqIDs_in, d_seqIDs_out, num_seeds_to_extend, 0, 8*sizeof(int), process_stream) );
+    gpuErrchk2( cub::DeviceRadixSort::SortPairsDescending(d_temp_storage, temp_storage_size, proc->d_sortkeys_in, proc->d_sortkeys_out, proc->d_seqIDs_in, proc->d_seqIDs_out, num_seeds_to_extend, 0, 8*sizeof(int), *(cudaStream_t*)proc->CUDA_stream) );
     cudaFree(d_temp_storage);
 
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4617,28 +4594,28 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(ANPAIR)){
-        printPair<<<1, WARPSIZE, 0, process_stream>>>(d_seed_records, num_seeds_to_extend, ANPAIR);
-        FINALIZE(printidentifiers[ANPAIR], process_stream);
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
+        printPair<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seed_records, num_seeds_to_extend, ANPAIR);
+        FINALIZE(printidentifiers[ANPAIR], *(cudaStream_t*)proc->CUDA_stream);
     }
 
 
 
-    cudaEventRecord(step_start, process_stream);
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     if(g3_opt->baseline){
-        GlobalExtend_baseline <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-                d_opt,
-                d_seed_records, num_seeds_to_extend, d_alns, d_seqIDs_out,
-                d_buffer_pools
+        GlobalExtend_baseline <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+                proc->d_opt,
+                proc->d_seed_records, num_seeds_to_extend, proc->d_alns, proc->d_seqIDs_out,
+                proc->d_buffer_pools
                 );
     } else{
-        GlobalExtend<<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-                d_opt,
-                d_seed_records, num_seeds_to_extend, d_alns, d_seqIDs_out,
-                d_buffer_pools
+        GlobalExtend<<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+                proc->d_opt,
+                proc->d_seed_records, num_seeds_to_extend, proc->d_alns, proc->d_seqIDs_out,
+                proc->d_buffer_pools
                 );
     }
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4648,22 +4625,22 @@ d_buffer_pools);
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(ANALN_)){
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printAln<<<1, WARPSIZE, 0, process_stream>>>(d_alns, readID, ANALN_);
-            FINALIZE(printidentifiers[ANALN_], process_stream);
+            printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_alns, readID, ANALN_);
+            FINALIZE(printidentifiers[ANALN_], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
 
-    cudaEventRecord(step_start, process_stream);
-    FINALIZEALN_final_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, process_stream >>>(
-            d_opt, d_bns, d_seqs,
-            d_regs, d_alns, d_seed_records, num_seeds_to_extend,
-            d_buffer_pools
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+    FINALIZEALN_final_kernel <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
+            proc->d_opt, proc->d_bns, proc->d_seqs,
+            proc->d_regs, proc->d_alns, proc->d_seed_records, num_seeds_to_extend,
+            proc->d_buffer_pools
             );
-    cudaEventRecord(step_stop, process_stream);
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
@@ -4679,11 +4656,11 @@ d_buffer_pools);
     }
     stage_lap += sum_lap;
 
-    if(g3_opt->print_mask & BIT(ANALN)){
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printAln<<<1, WARPSIZE, 0, process_stream>>>(d_alns, readID, ANALN);
-            FINALIZE(printidentifiers[ANALN], process_stream);
+            printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_alns, readID, ANALN);
+            FINALIZE(printidentifiers[ANALN], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
@@ -4694,7 +4671,7 @@ d_buffer_pools);
     }
 
 
-    //printBufferInfoHost(d_buffer_pools);
+    //printBufferInfoHost(proc->d_buffer_pools);
     cudaEventDestroy(step_start);
     cudaEventDestroy(step_stop);
 };
