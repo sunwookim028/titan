@@ -1753,7 +1753,8 @@ __global__ void SEEDCHAINING_flatten_mems(
         d_aux[blockIdx.x].mem.n = sum;
         d_aux[blockIdx.x].mem.a = shared_flat_seeds;
     }
-    __syncthreads(); __syncwarp();
+    __syncthreads(); 
+    __syncwarp();
 
     // 3. Flatten the seed intervals and write output to new_a.
     int step;
@@ -2180,7 +2181,7 @@ __global__ void sortSeedsLowDim(
     }
     __syncthreads();
 
-    // (1/3) sort by qe
+    // (1/2) sort by qe
     for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
         old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
         if(old_pos < n_seeds){
@@ -2202,8 +2203,10 @@ __global__ void sortSeedsLowDim(
         }
         s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
     }
+    __syncthreads();
+    __syncwarp();
 
-    // (2/3) sort by qb
+    // (2/2) sort by qb
     for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
         old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
         if(old_pos < n_seeds){
@@ -2225,31 +2228,7 @@ __global__ void sortSeedsLowDim(
         }
         seed_arrA[new_pos] = s_seed_arrB[thread_values[i]];
     }
-
-    // (3/3) sort by rb
-    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
-        old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
-        if(old_pos < n_seeds){
-            thread_keys[i] = seed_arrA[old_pos].rbeg;
-            thread_values[i] = old_pos;	
-        } else{ // pad with INT64_MAX
-            thread_keys[i] = INT64_MAX;
-            thread_values[i] = -1;
-        }   
-    }
-    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
-
-    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){ //reorder 
-        new_pos = threadIdx.x * SORTSEEDSLOW_NKEYS_THREAD + i;
-        if(new_pos >= n_seeds) break;
-        if(thread_values[i]==-1){
-            printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
-            __trap();
-        }
-        s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
-    }
-
-    d_seq_seeds[blockIdx.x].a = s_seed_arrB;
+    //d_seq_seeds[blockIdx.x].a = seed_arrA; // unnecessary.
 }
 
 
@@ -2281,8 +2260,9 @@ __global__ void sortSeedsHighDim(
         s_seed_arrB = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
     }
     __syncthreads();
+    __syncwarp();
 
-    // (1/3) sort by qe
+    // (1/2) sort by qe
     for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
         old_pos = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
         if(old_pos < n_seeds){
@@ -2304,8 +2284,10 @@ __global__ void sortSeedsHighDim(
         }
         s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
     }
+    __syncthreads();
+    __syncwarp();
 
-    // (2/3) sort by qb
+    // (2/2) sort by qb
     for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
         old_pos = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
         if(old_pos < n_seeds){
@@ -2327,31 +2309,7 @@ __global__ void sortSeedsHighDim(
         }
         seed_arrA[new_pos] = s_seed_arrB[thread_values[i]];
     }
-
-    // (3/3) sort by rb
-    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
-        old_pos = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
-        if(old_pos < n_seeds){
-            thread_keys[i] = seed_arrA[old_pos].rbeg;
-            thread_values[i] = old_pos;	
-        } else{ // pad with INT64_MAX
-            thread_keys[i] = INT64_MAX;
-            thread_values[i] = -1;
-        }   
-    }
-    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
-
-    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){ //reorder 
-        new_pos = threadIdx.x * SORTSEEDSHIGH_NKEYS_THREAD + i;
-        if(new_pos >= n_seeds) break;
-        if(thread_values[i]==-1){
-            printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
-            __trap();
-        }
-        s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
-    }
-
-    d_seq_seeds[blockIdx.x].a = s_seed_arrB;
+    //d_seq_seeds[blockIdx.x].a = seed_arrA;
 }
 
 
@@ -2542,22 +2500,14 @@ __global__ void Chaining(
         int start_new_chain = 0;
         mem_chain_t tmp, *lower, *upper;
         tmp.pos = s.rbeg;
-        lower=0;
-        int tm = -1;
         if(kb_size(tree)){
             kb_intervalp_chn(tree, &tmp, &lower, &upper); // find the closest chain
 
-            tm = test_and_merge(d_opt, d_bns->l_pac, lower, &s, s.rid, d_buffer_ptr);
-            if(!lower || !tm){
+            if(!lower || !test_and_merge(d_opt, d_bns->l_pac, lower, &s, s.rid, d_buffer_ptr)){
                 start_new_chain = 1;
             }
         } else{
             start_new_chain = 1;
-        }
-
-        if(seqID==291 || seqID==4791){
-            printf("Chaining %d %ld %d %d to_add=%d lower=%d tm=%d (n_seeds=%d)\n",\
-                    seqID, s.rbeg, s.len, s.qbeg, start_new_chain, !!lower, tm, n_seeds);
         }
 
         if(start_new_chain){
@@ -2584,91 +2534,6 @@ __global__ void Chaining(
     d_chains[seqID] = chain;
 }
 
-#if 0
-__global__ void mem_chain_kernel(
-        const mem_opt_t *opt,
-        const bwt_t *bwt,
-        const bntseq_t *bns,
-        const bseq1_t *d_seqs,
-        const int n,
-        smem_aux_t *d_aux,
-        mem_chain_v *d_chains,		// output,
-        int *d_seqIDs_out,			// for rearranging
-        void *d_buffer_pools
-        )
-{
-    kbtree_chn_t *tree;
-    mem_chain_v chain;
-
-    int seqID = blockIdx.x*blockDim.x + threadIdx.x;		// ID of the read to process
-    if (seqID>=n) return;
-    // seqID = d_seqIDs_out[seqID];		// rearrange for better warp efficiency
-    void* d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, threadIdx.x % 32);	// set buffer pool
-
-    chain.n = 0; chain.m = 0, chain.a = 0;
-    if (d_seqs[seqID].l_seq < opt->min_seed_len) { // if the query is shorter than the seed length, no match
-        d_chains[seqID] = chain; 
-        return;
-    }
-    tree = kb_init_chn(512, d_buffer_ptr);
-    smem_aux_t* aux = &d_aux[seqID];
-
-    /* TODO: MOVE THIS PART TO count_seed_warp_kernel*/
-    bwtintv_t p;
-    int b, e, l_rep;
-    for (int i = 0, b = e = l_rep = 0; i < aux->mem.n; ++i) { // compute frac_rep
-        p = aux->mem.a[i];
-        int sb = (p.info>>32), se = (uint32_t)p.info;
-        if (p.x[2] <= opt->max_occ) continue;
-        if (sb > e) l_rep += e - b, b = sb, e = se;
-        else e = e > se? e : se;
-    }
-    l_rep += e - b;
-
-    for (int i = 0; i < aux->mem.n; ++i) {
-        if (aux->mem.a[i].info == 0) continue;	// no seed
-                                                // if (i>0 && ((uint32_t)aux->mem.a[i].info == (uint32_t)aux->mem.a[i-1].info)) continue; // duplicate seed
-        p = aux->mem.a[i];
-        int step, count, slen = (uint32_t)p.info - (p.info>>32); // seed length
-        int64_t k;
-        step = p.x[2] > opt->max_occ? p.x[2] / opt->max_occ : 1;
-        for (k = count = 0; k < p.x[2] && count < opt->max_occ; k += step, ++count) {
-            mem_chain_t tmp, *lower, *upper;
-            mem_seed_t s;
-            int rid, to_add = 0;
-            s.rbeg = tmp.pos = bwt_sa_gpu(bwt, p.x[0] + k); // this is the base coordinate in the forward-reverse reference
-            s.qbeg = p.info>>32;
-            s.score= s.len = slen;
-            rid = bns_intv2rid_gpu(bns, s.rbeg, s.rbeg + s.len);
-            if (rid < 0) continue; // bridging multiple reference sequences or the forward-reverse boundary; TODO: split the seed; don't discard it!!!
-            if (kb_size(tree)) {
-                kb_intervalp_chn(tree, &tmp, &lower, &upper); // find the closest chain
-                if (!lower || !test_and_merge(opt, bns->l_pac, lower, &s, rid, d_buffer_ptr)) to_add = 1;
-            } else to_add = 1;
-            if (to_add) { // add the seed as a new chain
-                tmp.n = 1; tmp.m = 4;
-                tmp.seeds = (mem_seed_t*)CUDAKernelCalloc(d_buffer_ptr, tmp.m, sizeof(mem_seed_t), 8);
-                tmp.seeds[0] = s;
-                tmp.rid = rid;
-                tmp.is_alt = !!bns->anns[rid].is_alt;
-                kb_putp_chn(tree, &tmp, d_buffer_ptr);
-            }
-        }
-    }
-
-    // // if (buf == 0) smem_aux_destroy(aux);
-
-    // kv_resize(type = mem_chain_t, v = chain, s = kb_size(tree), d_buffer_ptr);
-    chain.m = kb_size(tree);
-    chain.a = (mem_chain_t*)CUDAKernelRealloc(d_buffer_ptr, chain.a, sizeof(mem_chain_t) * chain.m, 8);
-
-    __kb_traverse(tree, &chain, d_buffer_ptr);
-    b = d_seqs[seqID].l_seq; // this is seq length
-    for (int i = 0; i < chain.n; ++i) chain.a[i].frac_rep = (float)l_rep / b;
-    // kb_destroy(chn, tree);
-    d_chains[seqID] = chain;
-}
-#endif
 
 
 /* sort chains of each read by weight 
@@ -4449,6 +4314,14 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
             << " ms" << std::endl;
     }
     sum_lap += step_lap;
+
+    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
+        for(int readID = 0; readID < n_seqs; readID++)
+        {
+            printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, UUT);
+            FINALIZE(printidentifiers[UUT], *(cudaStream_t*)proc->CUDA_stream);
+        }
+    }
 
     cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     CHAINFILTERING_filter_kernel <<< n_seqs, CHAIN_FLT_BLOCKSIZE, MAX_N_CHAIN*(3*sizeof(uint16_t)+sizeof(uint8_t)), *(cudaStream_t*)proc->CUDA_stream >>> (
