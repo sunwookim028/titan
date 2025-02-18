@@ -16,8 +16,10 @@ __device__ __constant__ char *printidentifiers[] = {
     /*  ANPAIR  */  "ANpair",
     /*  ANALN_  */  "ANaln_",
     /*  ANALN   */  "ANaln",
-    /*  EESCORE */  "EEscore"
-    /*  FLATINTV */  "FLATintv"
+    /*  EESCORE */  "EEscore",
+    /*  FLATINTV */  "FLATintv",
+    /*  THRUST */  "ThrustSorted",
+
 };
 
 // format: [ID readID] qbeg qend num_hits sa_k

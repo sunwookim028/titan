@@ -11,7 +11,6 @@
 #include "bwa_CUDA.cuh"
 #include "kstring_CUDA.cuh"
 #include <string.h>
-#include <cub/cub.cuh>
 #include "streams.cuh"
 #include "batch_config.h"
 #include "hashKMerIndex.h"
@@ -22,6 +21,29 @@
 using namespace std::chrono;
 #include <iostream>
 using namespace std;
+
+#include <cub/cub.cuh>
+#include <thrust/device_vector.h>
+#include <thrust/sort.h>
+
+struct compare_rbeg {
+    __host__ __device__
+        bool operator()(const mem_seed_t& a, const mem_seed_t& b) const {
+            return a.rbeg < b.rbeg;
+        }
+};
+struct compare_qbeg {
+    __host__ __device__
+        bool operator()(const mem_seed_t& a, const mem_seed_t& b) const {
+            return a.qbeg < b.qbeg;
+        }
+};
+struct compare_qend {
+    __host__ __device__
+        bool operator()(const mem_seed_t& a, const mem_seed_t& b) const {
+            return a.qbeg + a.len < b.qbeg + b.len;
+        }
+};
 
 extern char *printidentifiers[];
 
@@ -2131,7 +2153,6 @@ __global__ void SEEDCHAINING_translate_seedinfo_kernel(
 // process reads who have less seeds
 __global__ void SEEDCHAINING_sortSeeds_low_kernel(
         mem_seed_v *d_seq_seeds,
-        int key_select,
         void *d_buffer_pools
         )
 {
@@ -2186,7 +2207,6 @@ __global__ void SEEDCHAINING_sortSeeds_low_kernel(
 // process reads who have more seeds
 __global__ void SEEDCHAINING_sortSeeds_high_kernel(
         mem_seed_v *d_seq_seeds,
-        int key_select,
         void *d_buffer_pools
         )
 {
@@ -4233,6 +4253,41 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     }
 
     cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+
+    mem_seed_v h_seeds_vec[MB_MAX_COUNT];
+    cudaMemcpy(h_seeds_vec, proc->d_seq_seeds,\
+            n_seqs * sizeof(mem_seed_v), cudaMemcpyDeviceToHost);
+
+    for(int k=0; k<n_seqs; k++){
+        thrust::device_ptr<mem_seed_t> d_seeds(h_seeds_vec[k].a);
+        thrust::device_vector<mem_seed_t> \
+            d_seeds_vec(d_seeds, d_seeds + h_seeds_vec[k].n);
+        thrust::stable_sort(d_seeds_vec.begin(), d_seeds_vec.end(), compare_rbeg());
+    }
+
+    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
+
+    CudaEventSynchronize(step_stop);
+    cudaEventElapsedTime(&step_lap, step_start, step_stop);
+    if(g3_opt->print_mask & BIT(STEP_TIME)){
+        std::cerr << "Chaining -> B-tree chaining -> seed sorting (thrust): " << step_lap 
+            << " ms" << std::endl;
+    }
+    sum_lap += step_lap;
+
+    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
+        for(int readID = 0; readID < n_seqs; readID++)
+        {
+            printSeed<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seq_seeds, readID, THRUST);
+            FINALIZE(printidentifiers[CHSEED], *(cudaStream_t*)proc->CUDA_stream);
+        }
+    }
+
+
+
+
+    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
+
     SEEDCHAINING_sortSeeds_low_kernel 
         <<< n_seqs, SORTSEEDSLOW_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
                 proc->d_seq_seeds,
