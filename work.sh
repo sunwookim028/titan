@@ -116,10 +116,11 @@ if [ $argc -lt 2 ]; then
     exit 1;
 fi
 if [ $argc -lt 3 ]; then
-    echo "usage: $script $arg1 $arg2 {0..63}"
-    echo "    0..63 = printing flag bitmask"
+    echo "usage: $script $arg1 $arg2 {0..}"
+    echo "    0.. = printing flag bitmask"
     echo "            0: silent"
-    echo "            +32: additional information (e.g. # extension inputs)"
+    echo "            +64: additional information (e.g. # extension inputs)"
+    echo "            +32: final rpos & cigar results"
     echo "            +1: stagewise running time"
     echo "            +2: stepwise running time"
     echo "            +4: step results from seeding stage"

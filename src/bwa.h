@@ -42,7 +42,9 @@
  * global ext. pairs, g. ext. regions, rpos & cigar results */
 #define PRINTEXTENDING 4 
 
-#define ADDITIONAL 5
+#define PRINTFINAL 5 /* rpos & cigar */
+
+#define ADDITIONAL 6
 
 
 // macros for internal usage.

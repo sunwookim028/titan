@@ -459,6 +459,7 @@ __device__ static int cal_sub(const mem_opt_t *opt, mem_alnreg_v *r)
     return j < r->n? r->a[j].score : opt->min_seed_len * opt->a;
 }
 
+#if 0
 __device__ void mem_pestat_GPU(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *regs, mem_pestat_t pes[4], void* d_buffer_ptr)
 {
     int i, d, max;
@@ -523,6 +524,7 @@ __device__ void mem_pestat_GPU(const mem_opt_t *opt, int64_t l_pac, int n, const
             pes[d].failed = 1;
         }
 }
+#endif
 
 
 /*****************************
@@ -2129,6 +2131,7 @@ __global__ void SEEDCHAINING_translate_seedinfo_kernel(
 // process reads who have less seeds
 __global__ void SEEDCHAINING_sortSeeds_low_kernel(
         mem_seed_v *d_seq_seeds,
+        int key_select,
         void *d_buffer_pools
         )
 {
@@ -2183,6 +2186,7 @@ __global__ void SEEDCHAINING_sortSeeds_low_kernel(
 // process reads who have more seeds
 __global__ void SEEDCHAINING_sortSeeds_high_kernel(
         mem_seed_v *d_seq_seeds,
+        int key_select,
         void *d_buffer_pools
         )
 {
@@ -2316,6 +2320,17 @@ __global__ void SEEDCHAINING_chain_kernel(
             S_preceding_seed[j] = j;	// make seed j head of chain
     }
 
+    __syncthreads();
+    __syncwarp();
+    if(threadIdx.x == 0){
+        for(int k=0; k<n_seeds; k++){
+            if(S_preceding_seed[k] == k){
+                printf("chain head seed: %d %ld %d %d\n", blockIdx.x,\
+                        seed_a[k].rbeg, seed_a[k].len, seed_a[k].qbeg);
+            }
+        }
+    }
+
     // now create the chains based on the doubly linked-lists that we found
     __shared__ int S_n_chains[1];
     __shared__ mem_chain_t* S_chain_a[1];
@@ -2394,7 +2409,7 @@ __global__ void Chaining(
         return;
     }
     mem_seed_t *seed_a = d_seq_seeds[seqID].a;	// seed array
-    int l_seq = d_seqs[seqID].l_seq;
+    //int l_seq = d_seqs[seqID].l_seq;
 
     kbtree_chn_t *tree;
     mem_chain_v chain;
@@ -2447,6 +2462,7 @@ __global__ void Chaining(
     d_chains[seqID] = chain;
 }
 
+#if 0
 __global__ void mem_chain_kernel(
         const mem_opt_t *opt,
         const bwt_t *bwt,
@@ -2530,6 +2546,7 @@ __global__ void mem_chain_kernel(
     // kb_destroy(chn, tree);
     d_chains[seqID] = chain;
 }
+#endif
 
 
 /* sort chains of each read by weight 
@@ -3016,10 +3033,6 @@ __global__ void LocalExtending_baseline(
     int gtle;		// length of the target if query is aligned to the end
     int query_end;	// endpoint on query after extension
     int64_t ref_end;// endpoint on ref after extension
-
-    int w, end_bonus;
-    w = d_opt->w;
-    end_bonus = d_opt->pen_clip5;
 
     // left extension
     int h0 = d_chains[seqID].a[chainID].seeds[seedID].len * d_opt->a; 	// initial score = seedlength*a
@@ -4657,7 +4670,8 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     }
     stage_lap += sum_lap;
 
-    if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
+    if(g3_opt->print_mask & BIT(PRINTEXTENDING) ||\
+            g3_opt->print_mask & BIT(PRINTFINAL)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
             printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_alns, readID, ANALN);
