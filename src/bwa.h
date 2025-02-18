@@ -58,7 +58,7 @@
 #define SWCHAIN     5   /* mem_chain_t, mem_chain_v */
 #define SWPAIR      6   /* seed_record_t, batch-wide 1D array */
 
-#define THRUST 15
+#define UUT 15
 // Extending stage.
 #define SWREG_      7   /* mem_alnreg_t, mem_alnreg_v */
 #define SWREG       8   /* mem_alnreg_t, mem_alnreg_v */

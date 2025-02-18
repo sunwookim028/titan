@@ -2151,7 +2151,7 @@ __global__ void SEEDCHAINING_translate_seedinfo_kernel(
 #define SORTSEEDSLOW_NKEYS_THREAD	2
 #define SORTSEEDSLOW_BLOCKDIMX		32
 // process reads who have less seeds
-__global__ void SEEDCHAINING_sortSeeds_low_kernel(
+__global__ void sortSeedsLowDim(
         mem_seed_v *d_seq_seeds,
         void *d_buffer_pools
         )
@@ -2160,52 +2160,101 @@ __global__ void SEEDCHAINING_sortSeeds_low_kernel(
     int n_seeds = d_seq_seeds[blockIdx.x].n;
     if (n_seeds==0) return;
     if (n_seeds>SORTSEEDSLOW_MAX_NSEEDS) return;
-    mem_seed_t *seed_a = d_seq_seeds[blockIdx.x].a;
-    // declare sorting variables
-    int64_t thread_keys[SORTSEEDSLOW_NKEYS_THREAD];	// this will contain rbeg
-    int thread_values[SORTSEEDSLOW_NKEYS_THREAD];	// this will contain original seedID
-                                                    // load data
-    for (int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
-        int seedID = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
-        if (seedID < n_seeds) // load true data
-            thread_keys[i] = seed_a[seedID].qbeg;
-        else	// pad with INT64_MAX
-            thread_keys[i] = INT64_MAX;
-        if (seedID < n_seeds) thread_values[i] = seedID;	// original seedID
-        else thread_values[i] = -1;
-    }
+
+    mem_seed_t *seed_arrA = d_seq_seeds[blockIdx.x].a;
 
     // Specialize BlockRadixSort
     typedef cub::BlockRadixSort<int64_t, SORTSEEDSLOW_BLOCKDIMX, SORTSEEDSLOW_NKEYS_THREAD, int> BlockRadixSort;
     // Allocate shared mem
     __shared__ typename BlockRadixSort::TempStorage temp_storage;
-    // sort keys
-    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values);
 
-    // reorder seeds to a new array
-    __shared__ mem_seed_t* S_new_seed_a[1];
+    // Block sort variables
+    int64_t thread_keys[SORTSEEDSLOW_NKEYS_THREAD];
+    int thread_values[SORTSEEDSLOW_NKEYS_THREAD];
+    int old_pos, new_pos;
+
+    __shared__ mem_seed_t* s_seed_arrB; // new bucket
     if (threadIdx.x==0){
         void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
-        S_new_seed_a[0] = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
+        s_seed_arrB = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
     }
     __syncthreads();
-    mem_seed_t *new_seed_a = S_new_seed_a[0];
-    for (int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
-        int seedID = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
-        if (seedID>=n_seeds) break;
-        if (thread_values[i]==-1) {
+
+    // (1/3) sort by qe
+    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
+        old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
+        if(old_pos < n_seeds){
+            thread_keys[i] = seed_arrA[old_pos].qbeg + seed_arrA[old_pos].len;
+            thread_values[i] = old_pos;	
+        } else{ // pad with INT64_MAX
+            thread_keys[i] = INT64_MAX;
+            thread_values[i] = -1;
+        }   
+    }
+    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
+
+    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){ //reorder 
+        new_pos = threadIdx.x * SORTSEEDSLOW_NKEYS_THREAD + i;
+        if(new_pos >= n_seeds) break;
+        if(thread_values[i]==-1){
             printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
             __trap();
         }
-        // copy to new array
-        new_seed_a[seedID] = seed_a[thread_values[i]];
+        s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
     }
-    d_seq_seeds[blockIdx.x].a = new_seed_a;
+
+    // (2/3) sort by qb
+    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
+        old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
+        if(old_pos < n_seeds){
+            thread_keys[i] = s_seed_arrB[old_pos].qbeg;
+            thread_values[i] = old_pos;	
+        } else{ // pad with INT64_MAX
+            thread_keys[i] = INT64_MAX;
+            thread_values[i] = -1;
+        }   
+    }
+    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
+
+    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){ //reorder 
+        new_pos = threadIdx.x * SORTSEEDSLOW_NKEYS_THREAD + i;
+        if(new_pos >= n_seeds) break;
+        if(thread_values[i]==-1){
+            printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
+            __trap();
+        }
+        seed_arrA[new_pos] = s_seed_arrB[thread_values[i]];
+    }
+
+    // (3/3) sort by rb
+    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
+        old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
+        if(old_pos < n_seeds){
+            thread_keys[i] = seed_arrA[old_pos].rbeg;
+            thread_values[i] = old_pos;	
+        } else{ // pad with INT64_MAX
+            thread_keys[i] = INT64_MAX;
+            thread_values[i] = -1;
+        }   
+    }
+    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
+
+    for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){ //reorder 
+        new_pos = threadIdx.x * SORTSEEDSLOW_NKEYS_THREAD + i;
+        if(new_pos >= n_seeds) break;
+        if(thread_values[i]==-1){
+            printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
+            __trap();
+        }
+        s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
+    }
+
+    d_seq_seeds[blockIdx.x].a = s_seed_arrB;
 }
 
 
 // process reads who have more seeds
-__global__ void SEEDCHAINING_sortSeeds_high_kernel(
+__global__ void sortSeedsHighDim(
         mem_seed_v *d_seq_seeds,
         void *d_buffer_pools
         )
@@ -2213,48 +2262,98 @@ __global__ void SEEDCHAINING_sortSeeds_high_kernel(
     // seqID = blockIdx.x
     int n_seeds = d_seq_seeds[blockIdx.x].n;
     if (n_seeds<=SORTSEEDSLOW_MAX_NSEEDS) return;
-    mem_seed_t *seed_a = d_seq_seeds[blockIdx.x].a;
-    // declare sorting variables
-    int64_t thread_keys[SORTSEEDSHIGH_NKEYS_THREAD];	// this will contain rbeg
-    int thread_values[SORTSEEDSHIGH_NKEYS_THREAD];	// this will contain original seedID
-                                                    // load data
-    for (int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
-        int seedID = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
-        if (seedID < n_seeds) // load true data
-            thread_keys[i] = seed_a[seedID].qbeg;
-        else	// pad with INT64_MAX
-            thread_keys[i] = INT64_MAX;
-        if (seedID < n_seeds) thread_values[i] = seedID;	// original seedID
-        else thread_values[i] = -1;
-    }
+
+    mem_seed_t *seed_arrA = d_seq_seeds[blockIdx.x].a;
 
     // Specialize BlockRadixSort
     typedef cub::BlockRadixSort<int64_t, SORTSEEDSHIGH_BLOCKDIMX, SORTSEEDSHIGH_NKEYS_THREAD, int> BlockRadixSort;
     // Allocate shared mem
     __shared__ typename BlockRadixSort::TempStorage temp_storage;
-    // sort keys
-    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values);
 
-    // reorder seeds to a new array
-    __shared__ mem_seed_t* S_new_seed_a[1];
+    // Block sort variables
+    int64_t thread_keys[SORTSEEDSHIGH_NKEYS_THREAD];
+    int thread_values[SORTSEEDSHIGH_NKEYS_THREAD];
+    int old_pos, new_pos;
+
+    __shared__ mem_seed_t* s_seed_arrB; // new bucket
     if (threadIdx.x==0){
         void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
-        S_new_seed_a[0] = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
+        s_seed_arrB = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
     }
     __syncthreads();
-    mem_seed_t *new_seed_a = S_new_seed_a[0];
-    for (int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
-        int seedID = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
-        if (seedID>=n_seeds) break;
-        if (thread_values[i]==-1) {
+
+    // (1/3) sort by qe
+    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
+        old_pos = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
+        if(old_pos < n_seeds){
+            thread_keys[i] = seed_arrA[old_pos].qbeg + seed_arrA[old_pos].len;
+            thread_values[i] = old_pos;	
+        } else{ // pad with INT64_MAX
+            thread_keys[i] = INT64_MAX;
+            thread_values[i] = -1;
+        }   
+    }
+    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
+
+    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){ //reorder 
+        new_pos = threadIdx.x * SORTSEEDSHIGH_NKEYS_THREAD + i;
+        if(new_pos >= n_seeds) break;
+        if(thread_values[i]==-1){
             printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
             __trap();
         }
-        // copy to new array
-        new_seed_a[seedID] = seed_a[thread_values[i]];
+        s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
     }
-    d_seq_seeds[blockIdx.x].a = new_seed_a;
+
+    // (2/3) sort by qb
+    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
+        old_pos = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
+        if(old_pos < n_seeds){
+            thread_keys[i] = s_seed_arrB[old_pos].qbeg;
+            thread_values[i] = old_pos;	
+        } else{ // pad with INT64_MAX
+            thread_keys[i] = INT64_MAX;
+            thread_values[i] = -1;
+        }   
+    }
+    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
+
+    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){ //reorder 
+        new_pos = threadIdx.x * SORTSEEDSHIGH_NKEYS_THREAD + i;
+        if(new_pos >= n_seeds) break;
+        if(thread_values[i]==-1){
+            printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
+            __trap();
+        }
+        seed_arrA[new_pos] = s_seed_arrB[thread_values[i]];
+    }
+
+    // (3/3) sort by rb
+    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){
+        old_pos = threadIdx.x*SORTSEEDSHIGH_NKEYS_THREAD+i;
+        if(old_pos < n_seeds){
+            thread_keys[i] = seed_arrA[old_pos].rbeg;
+            thread_values[i] = old_pos;	
+        } else{ // pad with INT64_MAX
+            thread_keys[i] = INT64_MAX;
+            thread_values[i] = -1;
+        }   
+    }
+    BlockRadixSort(temp_storage).Sort(thread_keys, thread_values); // it is stable
+
+    for(int i=0; i<SORTSEEDSHIGH_NKEYS_THREAD; i++){ //reorder 
+        new_pos = threadIdx.x * SORTSEEDSHIGH_NKEYS_THREAD + i;
+        if(new_pos >= n_seeds) break;
+        if(thread_values[i]==-1){
+            printf("Error: sorting result incorrect. SeqID=%d\n", blockIdx.x);
+            __trap();
+        }
+        s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
+    }
+
+    d_seq_seeds[blockIdx.x].a = s_seed_arrB;
 }
+
 
 /* find the smallest seed on seeds such that its rbeg>=rbeg_lower_bound*/
 __device__ inline static int search_lower_bound_rbeg(mem_seed_t *seeds, int seedID, int64_t rbeg_lower_bound){
@@ -4252,48 +4351,15 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
         }
     }
 
-    cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
-
-    mem_seed_v h_seeds_vec[MB_MAX_COUNT];
-    cudaMemcpy(h_seeds_vec, proc->d_seq_seeds,\
-            n_seqs * sizeof(mem_seed_v), cudaMemcpyDeviceToHost);
-
-    for(int k=0; k<n_seqs; k++){
-        thrust::device_ptr<mem_seed_t> d_seeds(h_seeds_vec[k].a);
-        thrust::device_vector<mem_seed_t> \
-            d_seeds_vec(d_seeds, d_seeds + h_seeds_vec[k].n);
-        thrust::stable_sort(d_seeds_vec.begin(), d_seeds_vec.end(), compare_rbeg());
-    }
-
-    cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
-
-    CudaEventSynchronize(step_stop);
-    cudaEventElapsedTime(&step_lap, step_start, step_stop);
-    if(g3_opt->print_mask & BIT(STEP_TIME)){
-        std::cerr << "Chaining -> B-tree chaining -> seed sorting (thrust): " << step_lap 
-            << " ms" << std::endl;
-    }
-    sum_lap += step_lap;
-
-    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
-        for(int readID = 0; readID < n_seqs; readID++)
-        {
-            printSeed<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seq_seeds, readID, THRUST);
-            FINALIZE(printidentifiers[CHSEED], *(cudaStream_t*)proc->CUDA_stream);
-        }
-    }
-
-
-
 
     cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
 
-    SEEDCHAINING_sortSeeds_low_kernel 
+    sortSeedsLowDim 
         <<< n_seqs, SORTSEEDSLOW_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
                 proc->d_seq_seeds,
                 proc->d_buffer_pools);
 
-    SEEDCHAINING_sortSeeds_high_kernel 
+    sortSeedsHighDim 
         <<< n_seqs, SORTSEEDSHIGH_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
                 proc->d_seq_seeds,
                 proc->d_buffer_pools);
@@ -4317,7 +4383,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 
     cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
     if(g3_opt->baseline){
-#if 1
+#if 0
 #define SEEDCHAINING_CHAIN_BLOCKDIMX 256
         SEEDCHAINING_chain_kernel <<< n_seqs, SEEDCHAINING_CHAIN_BLOCKDIMX, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
                 proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
@@ -4367,7 +4433,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     CudaEventSynchronize(step_stop);
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
     if(g3_opt->print_mask & BIT(STEP_TIME)){
-        std::cerr << "Chaining -> B-tree chaining -> seed sorting: " << step_lap 
+        std::cerr << "Chaining -> B-tree chaining -> chain sorting: " << step_lap 
             << " ms" << std::endl;
     }
     sum_lap += step_lap;
