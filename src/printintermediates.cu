@@ -55,6 +55,7 @@ __global__ void printSeed(mem_seed_v *d_seedvecs, int readID, int type)
 
     mem_seed_t *seedvec = d_seedvecs[readID].a;
     int num_seeds = d_seedvecs[readID].n;
+    printf("ppn_seeds %d %d\n", readID, num_seeds);
     for(mem_seed_t *seed = seedvec; seed < seedvec + num_seeds; seed++) {
         printf("[%s %d] %ld %d %d\n", printidentifiers[type], readID,\
                 seed->rbeg, seed->len, seed->qbeg);

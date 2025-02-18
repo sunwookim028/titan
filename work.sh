@@ -54,7 +54,7 @@ case "$arg2" in
             -o $NAME.sam\
             ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
             ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
-            ../input/ecoli/ecoli.100k";;
+            ../input/ecoli/ecoli.UUT";;
 
     76bp)
         NAME="76bp";
@@ -139,8 +139,8 @@ fi
 
 
 clean() {
-    echo "rm $NAME.sam $NAME.out $NAME.err"
-    rm $NAME.sam $NAME.out $NAME.err
+    echo "rm $(ls $NAME.*)"
+    rm $(ls $NAME.*)
 }
 
 

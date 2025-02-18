@@ -2542,24 +2542,27 @@ __global__ void Chaining(
         int start_new_chain = 0;
         mem_chain_t tmp, *lower, *upper;
         tmp.pos = s.rbeg;
+        lower=0;
+        int tm = -1;
         if(kb_size(tree)){
             kb_intervalp_chn(tree, &tmp, &lower, &upper); // find the closest chain
-#if 0
-            if(lower){
-                printf("lower: seqID %d rid %4d pos %4lu n %4d\n", seqID, lower->rid, lower->pos, lower->n);
-            } else {
-                printf("lower: seqID %d rid %4d pos %4d n %4d\n", seqID, -1, -1, -1);
-            }
-#endif
-            if(!lower || !test_and_merge(d_opt, d_bns->l_pac, lower, &s, s.rid, d_buffer_ptr)) {
+
+            tm = test_and_merge(d_opt, d_bns->l_pac, lower, &s, s.rid, d_buffer_ptr);
+            if(!lower || !tm){
                 start_new_chain = 1;
             }
         } else{
             start_new_chain = 1;
         }
 
+        if(seqID==291 || seqID==4791){
+            printf("Chaining %d %ld %d %d to_add=%d lower=%d tm=%d (n_seeds=%d)\n",\
+                    seqID, s.rbeg, s.len, s.qbeg, start_new_chain, !!lower, tm, n_seeds);
+        }
+
         if(start_new_chain){
-            if(s.rid<0 || s.rid >= 455){
+            if(s.rid<0 || s.rid >= 455){ //FIXME hardcoded err handling
+                printf("sth wrong: s.rid = %d\n", s.rid);
                 continue;
             }
             tmp.n = 1; tmp.m = SEEDS_PER_CHAIN;
@@ -4155,6 +4158,9 @@ __global__ void SAMGEN_concatenate_kernel(
  */
 void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 {
+    if(g3_opt->print_mask & BIT(ADDITIONAL)){
+        std::cout << "ALINGING NEW BATCH" << std::endl;
+    }
     cudaEvent_t step_start, step_stop;
     float stage_lap;
     float sum_lap;
@@ -4408,6 +4414,12 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     cudaEventRecord(step_stop, *(cudaStream_t*)proc->CUDA_stream);
 
     CudaEventSynchronize(step_stop);
+
+    cudaError_t error = cudaPeekAtLastError();
+    cudaDeviceSynchronize();  // Ensures any printf output is flushed
+    if (error != cudaSuccess) {
+            printf("CUDA Error: %s\n", cudaGetErrorString(error));
+    }
     cudaEventElapsedTime(&step_lap, step_start, step_stop);
     if(g3_opt->print_mask & BIT(STEP_TIME)){
         std::cerr << "Chaining -> B-tree chaining -> B-tree chaining core: " << step_lap
