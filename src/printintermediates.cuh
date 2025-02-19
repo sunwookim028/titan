@@ -17,6 +17,6 @@ __global__ void printPair(seed_record_t *d_pairs, int num_records, int type);
 // format: [ID readID] rb re qb qe score w seedcov frac_rep seedlen0
 __global__ void printReg(mem_alnreg_v *d_regvecs, int readID, int type);
 
-// format: [ID readID] rid rpos cigarstring
-__global__ void printAln(mem_aln_v *d_alnvecs, int readID, int type);
+// format: [ID readID] rname rpos cigarstring
+__global__ void printAln(bntseq_t *d_bns, mem_aln_v *d_alnvecs, int readID, int type);
 #endif

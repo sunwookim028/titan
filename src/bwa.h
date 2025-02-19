@@ -46,6 +46,8 @@
 
 #define ADDITIONAL 6
 
+#define PRINTCHCHAIN 7
+
 
 // macros for internal usage.
 // Seeding stage.

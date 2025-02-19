@@ -135,10 +135,20 @@ fi
     echo "$PROG $ARGS"
     ${PROG} ${ARGS} 2> >(tee $NAME.err >&2) 1>> $NAME.out
 }
-
+ask_for_confirmation() {
+    while true; do
+        read -p "Proceed? (y/n): " yn
+        case $yn in
+            [Yy]* ) break;;  # If 'y' or 'Y', proceed
+            [Nn]* ) exit;;      # If 'n' or 'N', exit
+            * ) echo "invalid input";;  # If invalid input, ask again
+        esac
+    done
+}
 
 clean() {
     echo "rm $(ls $NAME.*)"
+    ask_for_confirmation
     rm $(ls $NAME.*)
 }
 

@@ -2469,7 +2469,7 @@ __global__ void SEEDCHAINING_chain_kernel(
 // from the sorted seeds of the read.
 // 
 //
-__global__ void Chaining(
+__global__ void BTreeChaining(
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
         bseq1_t *d_seqs,
@@ -2543,7 +2543,7 @@ __global__ void Chaining(
 #define MAX_N_CHAIN 		2048
 #define NKEYS_EACH_THREAD	16
 #define SORTCHAIN_BLOCKDIMX	128
-__global__ void CHAINFILTERING_sortChains_kernel(mem_chain_v* d_chains, void* d_buffer_pools){
+__global__ void sortChainsDecreasingWeight(mem_chain_v* d_chains, void* d_buffer_pools){
     // if (blockIdx.x!=3921) return;
     // int seqID = blockIdx.x;
     int n_chn = d_chains[blockIdx.x].n;
@@ -2597,6 +2597,109 @@ __global__ void CHAINFILTERING_sortChains_kernel(mem_chain_v* d_chains, void* d_
     }
 }
 
+
+/*
+__global__ void filterChains(const mem_opt_t *d_opt, mem_chain_v *d_chains, void *d_buffer_pools, int n_seqs)
+{
+    int seqID = blockDim.x * blockIdx.x + threadIdx.x;
+    if(seqID >= n_seqs) return;
+    mem_chain_t *a_ = d_chains[seqID].a;
+    int n_chn_ = d_chains[seqID].n;
+    void* d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
+    //*new_a_SM = (mem_chain_t*)CUDAKernelMalloc(d_buffer_ptr, new_n_chn[0]*sizeof(mem_chain_t), 8);
+
+    int i, k, n_numc = 0;
+    if (n_chn_ == 0) return 0; // no need to filter
+    // compute the weight of each chain and drop chains with small weight
+    for (i = k = 0; i < n_chn_; ++i)
+    {
+        mem_chain_t *c = &a_[i];
+        c->first = -1; c->kept = 0;
+        c->w = mem_chain_weight(c);
+        if (c->w >= opt->min_chain_weight){
+            a_[k++] = *c;
+        }
+    }
+    n_chn_ = k;
+
+
+    int ilag = 0;
+
+    for (int l=0; l<range.size(); l++)
+    {
+        // this keeps int indices of the non-overlapping chains
+        kvec_t(int) chains = {0,0,0};
+        mem_chain_t *a =&a_[range[l].first];
+        int n_chn = range[l].second - range[l].first;
+        // original code block starts
+        ks_introsort(mem_flt, n_chn, a);
+
+        // pairwise chain comparisons
+        a[0].kept = 3;
+        kv_push(int, chains, 0);
+        for (i = 1; i < n_chn; ++i)
+        {
+            int large_ovlp = 0;
+            for (k = 0; k < chains.n; ++k)
+            {
+                int j = chains.a[k];
+                int b_max = chn_beg(a[j]) > chn_beg(a[i])? chn_beg(a[j]) : chn_beg(a[i]);
+                int e_min = chn_end(a[j]) < chn_end(a[i])? chn_end(a[j]) : chn_end(a[i]);
+                if (e_min > b_max && (!a[j].is_alt || a[i].is_alt)) { // have overlap; don't consider ovlp where the kept chain is ALT while the current chain is primary
+                    int li = chn_end(a[i]) - chn_beg(a[i]);
+                    int lj = chn_end(a[j]) - chn_beg(a[j]);
+                    int min_l = li < lj? li : lj;
+                    if (e_min - b_max >= min_l * opt->mask_level && min_l < opt->max_chain_gap) { // significant overlap
+                        large_ovlp = 1;
+                        if (a[j].first < 0) a[j].first = i; // keep the first shadowed hit s.t. mapq can be more accurate
+                        if (a[i].w < a[j].w * opt->drop_ratio && a[j].w - a[i].w >= opt->min_seed_len<<1)
+                            break;
+                    }
+                }
+            }
+            if (k == chains.n)
+            {
+                kv_push(int, chains, i);
+                a[i].kept = large_ovlp? 2 : 3;
+            }
+        }
+        for (i = 0; i < chains.n; ++i)
+        {
+            mem_chain_t *c = &a[chains.a[i]];
+            if (c->first >= 0) a[c->first].kept = 1;
+        }
+        free(chains.a);
+        for (i = k = 0; i < n_chn; ++i) { // don't extend more than opt->max_chain_extend .kept=1/2 chains
+            if (a[i].kept == 0 || a[i].kept == 3) continue;
+            if (++k >= opt->max_chain_extend) break;
+        }
+
+        for (; i < n_chn; ++i)
+            if (a[i].kept < 3) a[i].kept = 0;
+
+        for (i = k = 0; i < n_chn; ++i)  // free discarded chains
+        {
+            mem_chain_t *c = &a[i];
+            if (c->kept == 0)
+            {
+                if (c->m > SEEDS_PER_CHAIN) {
+                    tprof[PE11][tid] ++;
+                    free(c->seeds);
+                }
+                //free(c->seeds);
+            }
+            else a[k++ - ilag] = a[i];
+        }
+        // original code block ends
+        ilag += n_chn - k;
+    }
+
+    return n_numc;
+
+}
+*/
+
+
 /* each block takes care of 1 read, do pairwise comparison of chains 
    max number of chain is MAX_N_CHAIN
 Notations:
@@ -2604,23 +2707,26 @@ kept=0: definitely drop
 kept=3: definitely keep
 kept=1: not sure yet
  */
-__global__ void CHAINFILTERING_filter_kernel(
-        const mem_opt_t *opt, 
-        mem_chain_v *d_chains, 	// input and output
-        void* d_buffer_pools)
-{
 #define CHAIN_FLT_BLOCKSIZE 256
 #define GET_KEPT(i) (chn_info_SM[i]&0x3) 		// last 2 bits
 #define SET_KEPT(i, val) (chn_info_SM[i]&=0b11111100)|=val
 #define GET_IS_ALT(i) ((chn_info_SM[i]&0x4)>>2) 	// 3rd bit
 #define SET_IS_ALT(i, val) (chn_info_SM[i]&=0b11111011)|=(val<<2)
+__global__ void CHAINFILTERING_filter_kernel(
+        const mem_opt_t *opt, 
+        mem_chain_v *d_chains, 	// input and output
+        void* d_buffer_pools)
+{
     int i, j, n_chn, n_iter;
     // int seqID = blockIdx.x;
     n_chn = d_chains[blockIdx.x].n;
     mem_chain_t* a = d_chains[blockIdx.x].a;	// chains vector
     if (n_chn == 0) return; // no need to filter
     if (threadIdx.x>=n_chn) return;	// don't run padded threads
-    if (n_chn>MAX_N_CHAIN) n_chn = MAX_N_CHAIN;
+    if (n_chn>MAX_N_CHAIN){
+        printf("ABORT n_chn(%d) > MAX_N_CHAIN(%d)\n", n_chn, MAX_N_CHAIN);
+        __trap();
+    }
 
     extern __shared__ int SM[];		// dynamic shared mem
     uint16_t* chn_beg_SM = (uint16_t*)SM; 	// start of chains
@@ -2705,6 +2811,7 @@ __global__ void CHAINFILTERING_filter_kernel(
     }
 }
 
+#if 0
 __global__ void mem_chain_flt_kernel(const mem_opt_t *opt, 
         mem_chain_v *d_chains, 	// input and output
         int n, // number of reads
@@ -2827,6 +2934,7 @@ __global__ void CHAINFILTERING_flt_chained_seeds_kernel(
         c->n = k;
     }
 }
+#endif
 
 
 /* preprocessing 1 for SW extension 
@@ -4261,7 +4369,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
                 proc->d_chains,	// output
                 proc->d_buffer_pools);
 #else
-        Chaining 
+        BTreeChaining 
             <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
 
                     proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
@@ -4269,7 +4377,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
                     proc->d_buffer_pools);
 #endif
     } else{
-        Chaining 
+        BTreeChaining 
             <<< ceil((float)n_seqs / WARPSIZE) == 0 ? 1 : ceil((float)n_seqs / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
 
                     proc->d_opt, proc->d_bns, proc->d_seqs, proc->d_seq_seeds,
@@ -4292,7 +4400,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING) || g3_opt->print_mask & BIT(PRINTCHCHAIN)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
             printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, CHCHAIN);
@@ -4301,7 +4409,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     }
 
     cudaEventRecord(step_start, *(cudaStream_t*)proc->CUDA_stream);
-    CHAINFILTERING_sortChains_kernel 
+    sortChainsDecreasingWeight 
         <<< n_seqs, SORTCHAIN_BLOCKDIMX, 
         MAX_N_CHAIN*2*sizeof(uint16_t)+sizeof(mem_chain_t**), *(cudaStream_t*)proc->CUDA_stream>>> 
             (proc->d_chains, proc->d_buffer_pools);
@@ -4648,7 +4756,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     if(g3_opt->print_mask & BIT(PRINTEXTENDING)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_alns, readID, ANALN_);
+            printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_bns, proc->d_alns, readID, ANALN_);
             FINALIZE(printidentifiers[ANALN_], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
@@ -4680,7 +4788,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
             g3_opt->print_mask & BIT(PRINTFINAL)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_alns, readID, ANALN);
+            printAln<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_bns, proc->d_alns, readID, ANALN);
             FINALIZE(printidentifiers[ANALN], *(cudaStream_t*)proc->CUDA_stream);
         }
     }

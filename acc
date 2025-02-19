@@ -1,0 +1,8 @@
+chain 100bp 9/100k wrong
+ecoli res 93.5%
+76bp res 88.8%
+100bp res 72.7%
+152bp res 87.2%
+152bp chchain 68.2%
+152bp chchain_sorted 100.0%
+ecoli res 93.5%
