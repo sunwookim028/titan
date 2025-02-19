@@ -2181,11 +2181,11 @@ __global__ void sortSeedsLowDim(
     }
     __syncthreads();
 
-    // (1/2) sort by qe
+    // (1/2) sort by (effectively qe) (len)
     for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
         old_pos = threadIdx.x*SORTSEEDSLOW_NKEYS_THREAD+i;
         if(old_pos < n_seeds){
-            thread_keys[i] = seed_arrA[old_pos].qbeg + seed_arrA[old_pos].len;
+            thread_keys[i] = seed_arrA[old_pos].len;
             thread_values[i] = old_pos;	
         } else{ // pad with INT64_MAX
             thread_keys[i] = INT64_MAX;
@@ -2228,7 +2228,6 @@ __global__ void sortSeedsLowDim(
         }
         seed_arrA[new_pos] = s_seed_arrB[thread_values[i]];
     }
-    //d_seq_seeds[blockIdx.x].a = seed_arrA; // unnecessary.
 }
 
 
@@ -2309,7 +2308,6 @@ __global__ void sortSeedsHighDim(
         }
         seed_arrA[new_pos] = s_seed_arrB[thread_values[i]];
     }
-    //d_seq_seeds[blockIdx.x].a = seed_arrA;
 }
 
 
@@ -4352,10 +4350,10 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING) || g3_opt->print_mask & BIT(PRINTSTSEED)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printSeed<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seq_seeds, readID, CHSEED);
+            printSeed<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_seq_seeds, readID, STSEED);
             FINALIZE(printidentifiers[CHSEED], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
@@ -4423,11 +4421,11 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     }
     sum_lap += step_lap;
 
-    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING) || g3_opt->print_mask & BIT(PRINTSTCHAIN)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
-            printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, UUT);
-            FINALIZE(printidentifiers[UUT], *(cudaStream_t*)proc->CUDA_stream);
+            printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, STCHAIN);
+            FINALIZE(printidentifiers[STCHAIN], *(cudaStream_t*)proc->CUDA_stream);
         }
     }
 
@@ -4458,7 +4456,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     if(g3_opt->print_times==1) printf("Filtered2 chains from %d reads in (%05.1f) ms\n", n_seqs, lap);
 #endif
 
-    if(g3_opt->print_mask & BIT(PRINTCHAINING)){
+    if(g3_opt->print_mask & BIT(PRINTCHAINING) || g3_opt->print_mask & BIT(PRINTSWCHAIN)){
         for(int readID = 0; readID < n_seqs; readID++)
         {
             printChain<<<1, WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream>>>(proc->d_chains, readID, SWCHAIN);

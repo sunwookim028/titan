@@ -47,6 +47,10 @@
 #define ADDITIONAL 6
 
 #define PRINTCHCHAIN 7
+#define PRINTSTCHAIN 8
+#define PRINTSWCHAIN 9
+
+#define PRINTSTSEED 10
 
 
 // macros for internal usage.
@@ -55,8 +59,11 @@
 #define CHINTV      1   /* bwtintv_t,   smem_aux_t */
 #define CHSEED_     2   /* mem_seed_t,  mem_seed_v */
 #define CHSEED      3   /* mem_seed_t,  mem_seed_v */
+
+#define STSEED     17
 // Chaining stage.
 #define CHCHAIN     4   /* mem_chain_t, mem_chain_v */
+#define STCHAIN     16
 #define SWCHAIN     5   /* mem_chain_t, mem_chain_v */
 #define SWPAIR      6   /* seed_record_t, batch-wide 1D array */
 

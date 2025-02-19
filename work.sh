@@ -22,6 +22,28 @@ usage() {
     echo "  152bp       100k (submission data)"
 }
 
+usage_printflags() {
+    echo "    0.. = printing flag bitmask"
+    echo "            0: silent"
+    echo "            +64: additional information (e.g. # extension inputs)"
+    echo "            +32: final rpos & cigar results"
+    echo "            +128: chain"
+    echo "            +256: sorted chain"
+    echo "            +512: filtered, sorted chain"
+    echo "            +1024: stseed: sorted & sampled seeds just before chaining"
+    echo ""
+    echo "            +1: stagewise running time"
+    echo "            +2: stepwise running time"
+    echo "            +4: step results from seeding stage"
+    echo "                  : Seed, Reseed intervals."
+    echo "            +8: step results from chaining stage"
+    echo "                  : Sampled seeds, sorted -, chains, sorted -, filtered -."
+    echo "            +16: step results from extending stage"
+    echo "                  : Ext. pairs, ext. regions, filtered -, sorted -,"
+    echo "                    global ext. pairs, g. ext. regions,"
+    echo "                    rpos & cigar results."
+}
+
 
 # script args
 argc="$#"
@@ -116,20 +138,7 @@ if [ $argc -lt 2 ]; then
 fi
 if [ $argc -lt 3 ]; then
     echo "usage: $script $arg1 $arg2 {0..}"
-    echo "    0.. = printing flag bitmask"
-    echo "            0: silent"
-    echo "            +64: additional information (e.g. # extension inputs)"
-    echo "            +32: final rpos & cigar results"
-    echo "            +1: stagewise running time"
-    echo "            +2: stepwise running time"
-    echo "            +4: step results from seeding stage"
-    echo "                  : Seed, Reseed intervals."
-    echo "            +8: step results from chaining stage"
-    echo "                  : Sampled seeds, sorted -, chains, sorted -, filtered -."
-    echo "            +16: step results from extending stage"
-    echo "                  : Ext. pairs, ext. regions, filtered -, sorted -,"
-    echo "                    global ext. pairs, g. ext. regions,"
-    echo "                    rpos & cigar results."
+    usage_printflags
     exit 1;
 fi
     echo "$PROG $ARGS"
@@ -155,15 +164,8 @@ clean() {
 
 debug() {
 if [ $argc -lt 3 ]; then
-    echo "usage: $0 $1 $2 {0..63}"
-    echo "    0..63 = printing flag bitmask"
-    echo "            0: silent"
-    echo "            +32: additional information (e.g. # extension inputs)"
-    echo "            +1: stagewise running time"
-    echo "            +2: stepwise running time"
-    echo "            +4: step results from seeding stage"
-    echo "            +8: step results from chaining stage"
-    echo "            +16: step results from extending stage"
+    echo "usage: $0 $1 $2 {0..}"
+    usage_printflags
     exit 1;
 fi
     echo "cuda-gdb --args $PROG $ARGS"

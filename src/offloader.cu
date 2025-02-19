@@ -168,6 +168,7 @@ static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
     } 
 
     while(true){
+        std::cout << "new batch" << std::endl;
         std::thread t_align(bwa_align, gpuid, batch_A, g3_opt);
         pull(batch_B, pull_counter, pull_m);
         push(batch_B, loadedinput, push_counter, push_m);

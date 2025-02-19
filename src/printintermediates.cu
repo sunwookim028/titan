@@ -19,6 +19,8 @@ __device__ __constant__ char *printidentifiers[] = {
     /*  EESCORE */  "EEscore",
     /*  FLATINTV */  "FLATintv",
     /*  UUT */  "UUT",
+    /*  STCHAIN */  "SortedCHchain",
+    /*  STSEED */  "stseed",
 
 };
 
