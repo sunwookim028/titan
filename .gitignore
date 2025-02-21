@@ -1,5 +1,4 @@
 src/*.[oa]
-titan
 *.sam
 *.out
 *.err
@@ -9,3 +8,4 @@ ecoli.*
 log
 temp*
 .nfs*
+.depend

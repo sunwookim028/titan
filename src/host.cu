@@ -142,31 +142,40 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
     struct timespec start, end;
     double walltime;
 
-    dataloader(aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loaded, g3_opt);
+    //dataloader(aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loaded, g3_opt);
+    //offloader(loaded, proc, tran, g3_opt);//, superbatch_results[iter]);
 
+    long int num_total_reads = 0;
     clock_gettime(CLOCK_REALTIME,  &start);
-    offloader(loaded, proc, tran, g3_opt);//, superbatch_results[iter]);
-    clock_gettime(CLOCK_REALTIME,  &end);
-    walltime = (end.tv_sec - start.tv_sec) +\
-                           (end.tv_nsec - start.tv_nsec) / 1e9;
-    fprintf(stderr,"\n\nWall-clock time for processing a single batch of %ld reads: %.6lf seconds\n\n\n", loaded->n_reads, walltime);
 
-    /*
-    int iter = 0;
+#define A 0
+#define B 1
+#define toggle(ab) (1 - (ab))
+    int AB = A;
     do {
-        //std::thread t_dataloader(dataloader, aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loading);
-        //std::thread t_offloader(offloader, loaded, proc, tran, g3_opt);//, superbatch_results[iter]);
-        ////std::thread t_storer(storer, aux->fd_outfile, superbatch_results[1-iter]);
+        std::thread t_dataloader(dataloader, aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loading, g3_opt);
+        std::thread t_offloader(offloader, loaded, proc, tran, g3_opt);//, superbatch_results[AB]);
+        //std::thread t_storer(storer, aux->fd_outfile, superbatch_results[toggle(AB)]); // possibly merge pulled results
 
-        //t_offloader.join();
-        //t_dataloader.join();
+        t_offloader.join();
+        t_dataloader.join();
 
-        auto tmp = loaded;
+        superbatch_data_t * tmp = loaded;
         loaded = loading;
         loading = tmp;
         resetSuperBatchData(loading);
-        iter = 1-iter;
-        printf("main_gcube: loaded->n_reads %d\n", loaded->n_reads);
+        AB = toggle(AB);
+        fprintf(stderr, "main_gcube: loaded->n_reads %d\n", loaded->n_reads);
+        num_total_reads += loaded->n_reads;
     } while (loaded->n_reads != 0);
-    */
+
+    clock_gettime(CLOCK_REALTIME,  &end);
+    walltime = (end.tv_sec - start.tv_sec) +\
+                           (end.tv_nsec - start.tv_nsec) / 1e9;
+    fprintf(stderr,"\n\nWall-clock time for processing all %ld reads: %.6lf seconds\n\n\n", num_total_reads, walltime);
+
+    for(int j=0; j<num_use_gpus; j++){
+        cudaStreamDestroy(*(cudaStream_t*)proc[j]->CUDA_stream);
+        cudaStreamDestroy(*(cudaStream_t*)tran[j]->CUDA_stream);
+    }
 }

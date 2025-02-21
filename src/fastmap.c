@@ -68,7 +68,6 @@ int main_mem(int argc, char *argv[])
 	char *p, *rg_line = 0, *hdr_line = 0;
 	const char *mode = 0;
 	void *ko = 0, *ko2 = 0;
-    int num_use_gpus = 1;
 	mem_pestat_t pes[4];
 	ktp_aux_t aux;
     aux.fd_outfile = 1; // STDOUT
@@ -123,7 +122,8 @@ int main_mem(int argc, char *argv[])
                     perror("opening outfile");
                     exit(1);
             }
-            write(fd, "merry poppins", 15);
+            const char * testmsg = "Musical Hamilton costs $220+ !";
+            write(fd, testmsg, strlen(testmsg));
             aux.fd_outfile = fd;
         }
 		else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
@@ -339,7 +339,6 @@ int main_mem(int argc, char *argv[])
     double walltime;
 
     clock_gettime(CLOCK_REALTIME,  &start);
-    fprintf(stderr, "g3_opt->print_mask = %ld\n", g3_opt->print_mask);
 	main_gcube(&aux, g3_opt);
     clock_gettime(CLOCK_REALTIME,  &end);
 

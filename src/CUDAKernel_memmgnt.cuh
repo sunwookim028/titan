@@ -16,7 +16,7 @@ void reset_pools(void *d_buffer_pools);
 // initialize 32 chunks of memory
 extern __host__ void* CUDA_BufferInit();
 // reset buffer pools
-extern __host__ void CUDAResetBufferPool(void* big_pool, cudaStream_t stream);
+extern __host__ void CUDAResetBufferPool(void* big_pool);
 
 /* FUNCTION TO DO MALLOC AND REALLOC WITHIN CUDA KERNELS */
 // select a buffer pool from the big pool

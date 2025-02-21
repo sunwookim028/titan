@@ -1,3 +1,5 @@
+#ifndef _KSTRING_CUDA_H
+#define _KSTRING_CUDA_H
 
 typedef struct __kstring_t {
 	size_t l, m;
@@ -13,3 +15,4 @@ extern __device__ int kputc(int c, kstring_t *s, void* d_buffer_ptr);
 extern __device__ int kputw(int c, kstring_t *s, void* d_buffer_ptr);
 extern __device__ int kputl(long c, kstring_t *s, void* d_buffer_ptr);
 extern __device__ char* strdup_GPU(char* src, void* d_buffer_ptr);
+#endif

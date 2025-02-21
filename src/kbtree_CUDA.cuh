@@ -1,3 +1,5 @@
+#ifndef _KBTREE_CUDA_CUH
+#define _KBTREE_CUDA_CUH
 #include <stdint.h>
 #include "bwamem.h"
 
@@ -21,3 +23,4 @@ extern __device__ kbtree_chn_t *kb_init_chn(int size, void* CUDAKernel_buffer);
 extern __device__ void kb_intervalp_chn(kbtree_chn_t *b, const mem_chain_t * __restrict k, mem_chain_t **lower, mem_chain_t **upper);
 extern __device__ void kb_putp_chn(kbtree_chn_t *b, const mem_chain_t * __restrict k, void* CUDAKernel_buffer) ;
 extern __device__ void __kb_traverse(kbtree_chn_t* b, mem_chain_v* chain, void* CUDAKernel_buffer);
+#endif

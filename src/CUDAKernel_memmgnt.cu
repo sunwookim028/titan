@@ -1,12 +1,13 @@
 #include "batch_config.h"
 #include "CUDAKernel_memmgnt.cuh"
 #include "errHandler.cuh"
+#include <iostream>
 
 __host__
 void reset_pools(void *d_buffer_pools){
 	// reset memory management
     void *h_pools[NBUFFERPOOLS];
-	gpuErrchk( cudaMemcpy(h_pools, d_buffer_pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyDeviceToHost) );
+	gpuErrchk( cudaMemcpy((void**)h_pools, (void**)d_buffer_pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyDeviceToHost) );
 
 	// reset memory info at the head of each pool
 	CUDAKernel_mem_info pool_info;		// intermediate data on host
@@ -46,7 +47,6 @@ __host__ void* CUDA_BufferInit(){
 	return (void*)d_pools;
 }
 
-/*
 __host__ void CUDAResetBufferPool(void* d_buffer_pools){
 	// first coppy the array of pool pointers to host
 	void** h_pools;
@@ -68,7 +68,6 @@ __host__ void CUDAResetBufferPool(void* d_buffer_pools){
 
 	free(h_pools);
 }
-*/
 
 __device__ void* CUDAKernelSelectPool(void* d_buffer_pools, int i){
 	/* return pointer to the selected buffer pool */
@@ -184,13 +183,6 @@ __device__ unsigned cudaKernelSizeOf(void* ptr){
 	/* return the size of the memory chunk that starts with ptr */
 	unsigned* size_ptr = (unsigned*)((char*)ptr - 4);
 	return *size_ptr;
-}
-
-/* for debugging */
-__device__ void	printBufferInfo(void* d_buffer_pools, int pool_id){
-	void* d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, pool_id);
-	CUDAKernel_mem_info* d_pool_info = (CUDAKernel_mem_info*)d_buffer_ptr;
-	printf("pool %2d: %f used\n", pool_id, (float)d_pool_info->current_offset/d_pool_info->end_offset);	
 }
 
 /* print buffer info from host */

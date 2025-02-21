@@ -1,1 +1,1 @@
-scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 9001 $1 intern@147.46.67.14:~/ics/short/
+scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 7110 $1 skim28@147.46.67.14:~/

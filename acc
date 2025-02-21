@@ -3,18 +3,27 @@ ecoli res 93.5%
 76bp res 88.8%
 100bp res 72.7%
 152bp res 87.2%
-152bp chchain 68.2%
-152bp chchain_sorted 100.0%
-ecoli res 93.5%
-ecoli stseed 96.5%
-ecoli stseed 100.0%
-ecoli stseed 100.0%
-ecoli stseed 100.0%
-ecoli stseed 100.0%
-76bp stseed 36.3%
-ecoli stseed 96.5%
-76bp stseed 36.3%
 ecoli stseed 100.0%
 76bp stseed 100.0%
 100bp stseed 100.0%
 152bp stseed 100.0%
+these 100.0% are actually ~5/100k wrong
+ecoli result 93.6%
+ecoli result 96.1%
+ecoli result 96.1%
+ecoli result 96.1%
+ecoli result 96.1%
+ecoli result 96.1%
+ecoli result 96.1%
+ecoli result 96.1%
+ecoli result 93.6%
+ecoli result 93.6%
+ecoli result 96.1% (last col. ignored)
+ecoli result 93.6%
+76bp result 100.0%
+76bp result 100.0%
+76bp result 100.0% (last col. ignored)
+100bp result 100.0%
+100bp result 100.0% (last col. ignored)
+152bp result 100.0%
+152bp result 100.0% (last col. ignored)

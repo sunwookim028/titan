@@ -166,6 +166,12 @@ static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
            << " : cudaSetDevice failed" << std::endl;
         return;
     } 
+    int current;
+    cudaGetDevice(&current);
+    if(current != gpuid){
+         std::cerr << "GPU " << gpuid << "  " << "deviceoffloader: cudaSetDevice is wrong" << std::endl;
+        return;
+    }
 
     while(true){
         std::cout << "new batch" << std::endl;
@@ -190,6 +196,9 @@ void offloader(superbatch_data_t *loadedinput, process_data_t *proc[MAX_NUM_GPUS
 {
     std::cerr << "CPU Batch: Processing # " << loadedinput->n_reads
         << "reads" << std::endl;
+    if(loadedinput->n_reads == 0){
+        return;
+    }
     std::thread perGPU[MAX_NUM_GPUS];
     int pull_counter = 0;
     int push_counter = 0;

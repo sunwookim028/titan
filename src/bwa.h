@@ -28,55 +28,37 @@
 #ifndef BWA_H_
 #define BWA_H_
 
+
 // Print flag bitmasks.
 #define BIT(n) (1L << (n))
 
-#define STAGE_TIME 0
-#define STEP_TIME 1
+#define _DETAIL         0
+#define _STAGE_TIME     1
+#define _STEP_TIME      2
+#define _SMEM           3
+#define _INTV           4
+#define _SEED           5
+#define _STSEED         6
+#define _CHAIN          7
+#define _STCHAIN        8
+#define _FTCHAIN        9
+#define _EXPAIR         10
+#define _REGION         11
+#define _FTREGION       12
+#define _STREGION       13
+#define _TBPAIR         14
+#define _ALIGNMENT      15
+#define _RESULT         16
 
-/* Seed, Reseed intervals */
-#define PRINTSEEDING 2 
-/* Sampled seeds, sorted -, chains, sorted -, filtered - */
-#define PRINTCHAINING 3 
-/* Ext. pairs, ext. regions, filtered -, sorted -, 
- * global ext. pairs, g. ext. regions, rpos & cigar results */
-#define PRINTEXTENDING 4 
+#define _ALL_SEEDING    21
+#define _ALL_CHAINING   22
+#define _ALL_EXTENDING  23
 
-#define PRINTFINAL 5 /* rpos & cigar */
-
-#define ADDITIONAL 6
-
-#define PRINTCHCHAIN 7
-#define PRINTSTCHAIN 8
-#define PRINTSWCHAIN 9
-
-#define PRINTSTSEED 10
+#define _BUFFER_USAGE   30
 
 
-// macros for internal usage.
-// Seeding stage.
-#define SMINTV      0   /* bwtintv_t,   smem_aux_t */
-#define CHINTV      1   /* bwtintv_t,   smem_aux_t */
-#define CHSEED_     2   /* mem_seed_t,  mem_seed_v */
-#define CHSEED      3   /* mem_seed_t,  mem_seed_v */
 
-#define STSEED     17
-// Chaining stage.
-#define CHCHAIN     4   /* mem_chain_t, mem_chain_v */
-#define STCHAIN     16
-#define SWCHAIN     5   /* mem_chain_t, mem_chain_v */
-#define SWPAIR      6   /* seed_record_t, batch-wide 1D array */
 
-#define UUT 15
-// Extending stage.
-#define SWREG_      7   /* mem_alnreg_t, mem_alnreg_v */
-#define SWREG       8   /* mem_alnreg_t, mem_alnreg_v */
-#define ANREG       9   /* mem_alnreg_t, mem_alnreg_v */
-#define ANPAIR      10  /* seed_record_t, batch-wide 1D array */
-#define ANALN_      11  /* mem_aln_t, mem_aln_v */
-#define ANALN       12  /* mem_aln_t, mem_aln_v */
-
-#define FLATINTV      13   /* bwtintv_t,   smem_aux_t */
 
 #include <stdint.h>
 #include "bntseq.h"

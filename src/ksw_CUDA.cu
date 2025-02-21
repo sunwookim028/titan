@@ -1,4 +1,5 @@
 #include "ksw_CUDA.cuh"
+#include "batch_config.h"
 #include "CUDAKernel_memmgnt.cuh"
 
 __device__ const kswr_t g_defr = { 0, -1, -1, -1, -1, -1, -1 };

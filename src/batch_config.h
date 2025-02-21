@@ -1,6 +1,8 @@
 #ifndef BATCH_CONFIG_H
 #define BATCH_CONFIG_H
 
+#define WARPSIZE 32
+
 #define NBUFFERPOOLS 32 	// number of buffer pools
 #define POOLSIZE 80000000	// size of each buffer pool
 

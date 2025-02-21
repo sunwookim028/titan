@@ -1,3 +1,5 @@
+#ifndef _BWAMEM_CUH
+#define _BWAMEM_CUH
 #define CUDA_BLOCKSIZE 32
 
 #include "bwa.h"
@@ -15,3 +17,4 @@ extern "C"{
 } // end extern "C"
 #endif
 
+#endif

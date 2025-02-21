@@ -262,7 +262,7 @@ fprintf(stderr, "transferred sentinel index = %ld to device\n", *(idx->sentinelI
 
 void newProcess(
         process_data_t ** output,
-        int gpu_no,
+        int gpuid,
 	const mem_opt_t *opt, 
 	mem_pestat_t *pes0,
 	const bwt_t *bwt, 
@@ -272,13 +272,19 @@ void newProcess(
     const fmIndex *hostFmIndex
 )
 {
-    if(cudaSetDevice(gpu_no) != cudaSuccess){
+    if(cudaSetDevice(gpuid) != cudaSuccess){
         std::cerr << "newProcess: cudaSetDevice failed" << std::endl;
         exit(1);
     }
+    int current;
+    cudaGetDevice(&current);
+    if(current != gpuid){
+         std::cerr << "GPU " << gpuid << "  " << "newProcess: cudaSetDevice is wrong" << std::endl;
+        return;
+    }
     // new instance in memory
     process_data_t *instance = (process_data_t*)calloc(1, sizeof(process_data_t));
-    instance->gpu_no = gpu_no;
+    instance->gpu_no = gpuid;
 
 	// user-defined options
 	transferOptions(opt, pes0, instance);
@@ -337,13 +343,20 @@ void newProcess(
 }
 
 
-void newTransfer(transfer_data_t **output, int gpu_no){
-    if(cudaSetDevice(gpu_no) != cudaSuccess){
+void newTransfer(transfer_data_t **output, int gpuid){
+    if(cudaSetDevice(gpuid) != cudaSuccess){
         std::cerr << "newTransfer: cudaSetDevice failed" << std::endl;
         exit(1);
     }
+
+    int current;
+    cudaGetDevice(&current);
+    if(current != gpuid){
+         std::cerr << "GPU " << gpuid << "  " << "newTransfer: cudaSetDevice is wrong" << std::endl;
+        return;
+    }
     transfer_data_t *instance = (transfer_data_t*)calloc(1, sizeof(transfer_data_t));
-    instance->gpu_no = gpu_no;
+    instance->gpu_no = gpuid;
 
 	// initialize pinned memory for reads on host
 	gpuErrchk( cudaMallocHost((void**)&instance->h_seqs, MB_MAX_COUNT*sizeof(bseq1_t)) );
@@ -382,7 +395,7 @@ void newTransfer(transfer_data_t **output, int gpu_no){
 
 	// initialize a cuda stream for transfer
 	instance->CUDA_stream = malloc(sizeof(cudaStream_t));
-	cudaStreamCreate((cudaStream_t*)instance->CUDA_stream);
+	gpuErrchk( cudaStreamCreate((cudaStream_t*)instance->CUDA_stream) );
 
     *output = instance;
 }
@@ -412,9 +425,16 @@ void swapData(process_data_t *process_data, transfer_data_t *transfer_data){
 }
 
 void CUDATransferSeqsIn(transfer_data_t *transfer_data){
+    int gpuid = transfer_data->gpu_no;
     if(cudaSetDevice(transfer_data->gpu_no) != cudaSuccess){
         std::cerr << "CUDATransferSeqsIn: cudaSetDevice failed" << std::endl;
         exit(1);
+    }
+    int current;
+    cudaGetDevice(&current);
+    if(current != gpuid){
+         std::cerr << "GPU " << gpuid << "  " << "CUDATransferSeqsIn: cudaSetDevice is wrong" << std::endl;
+        return;
     }
 	cudaStream_t *transfer_stream = (cudaStream_t*)(transfer_data->CUDA_stream);
 	// copy seqs to device
@@ -430,9 +450,16 @@ void CUDATransferSeqsIn(transfer_data_t *transfer_data){
 
 /* copy sam output to host */
 void CUDATransferSamOut(transfer_data_t *transfer_data){
+    int gpuid = transfer_data->gpu_no;
     if(cudaSetDevice(transfer_data->gpu_no) != cudaSuccess){
         std::cerr << "CUDATransferSamOut: cudaSetDevice failed" << std::endl;
         exit(1);
+    }
+    int current;
+    cudaGetDevice(&current);
+    if(current != gpuid){
+         std::cerr << "GPU " << gpuid << "  " << "CUDATransferSamOut: cudaSetDevice is wrong" << std::endl;
+        return;
     }
 	cudaStream_t *transfer_stream = (cudaStream_t*)(transfer_data->CUDA_stream);
 	gpuErrchk( cudaMemcpyAsync(transfer_data->h_seqs, transfer_data->d_seqs, transfer_data->n_seqs*sizeof(bseq1_t), cudaMemcpyDeviceToHost, *transfer_stream) );

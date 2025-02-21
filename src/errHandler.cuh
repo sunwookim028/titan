@@ -15,7 +15,20 @@ inline int gpuAssert(cudaError_t code, const char *file, int line, bool abort=tr
       fprintf(stderr,"Friendly Message: %s %s %d\n", cudaGetErrorString(code), file, line);
       return code;
    }
+   cudaError_t err = cudaGetLastError();
+   if (err != cudaSuccess) {
+      fprintf(stderr,"cudaGetLastError(): %s %s %d\n", cudaGetErrorString(code), file, line);
+           // Handle the error immediately
+   }
    return 0;
+}
+
+#define GET_LAST_ERR() \
+{\
+   cudaError_t err = cudaGetLastError();\
+   if (err != cudaSuccess) {\
+      fprintf(stderr,"GPU %d cudaGetLastError(): %s %s %d\n", gpuid, cudaGetErrorString(err), __FILE__, __LINE__);\
+   }\
 }
 
 #define MB_SIZE (1<<20)

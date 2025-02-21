@@ -1,3 +1,6 @@
+#ifndef _BWT_CUDA_H
+#define _BWT_CUDA_H
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,3 +32,4 @@ extern __device__ int bwt_smem1a_gpu(const bwt_t *bwt, int len, const uint8_t *q
 extern __device__ int bwt_seed_strategy1_gpu(const bwt_t *bwt, int len, const uint8_t *q, int x, int min_len, int max_intv, bwtintv_t *mem);
 
 extern __device__ bwtint_t bwt_sa_gpu(const bwt_t *bwt, bwtint_t k);
+#endif

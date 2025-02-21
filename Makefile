@@ -1,15 +1,15 @@
 # Compilers and flags
 INCLUDES = -Isrc -Iext/zlib-1.3.1 -Iext/safestringlib/include -Iext/bwa-mem2/include
 CXX = g++
-CXXFLAGS = -Wall -O2 -std=c++11 $(INCLUDES)
+CXXFLAGS = -Wall -O2 -std=c++11 $(INCLUDES)-MMD -MP
 CC = gcc
-CFLAGS = -Wall -Wno-unused-function -O2 $(INCLUDES) -lm -DUSE_MALLOC_WRAPPERS 
+CFLAGS = -Wall -Wno-unused-function -O2 $(INCLUDES) -lm -DUSE_MALLOC_WRAPPERS -MMD -MP
 NVCC = /usr/local/cuda-12.1/bin/nvcc
 CU_ARCH = sm_86
 CU_COMPUTE_ARCH = $(subst sm,compute,$(CU_ARCH))
 
 __NVFLAGS = -ccbin /usr/bin/g++-11 --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -Xptxas -O4 -Xcompiler -O4
-_NVFLAGS = -ccbin /usr/bin/g++-11 --device-c --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) 
+_NVFLAGS = -ccbin /usr/bin/g++-11 --device-c --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -MMD -MP
 NVFLAGS = $(_NVFLAGS) -Xptxas -O4 -Xcompiler -O4 
 NVFLAGS_DEBUG = $(_NVFLAGS) -lineinfo -Xcompiler -Wall -Xptxas -Werror 
 
@@ -28,9 +28,6 @@ ARFLAGS = -csru
 TARGET1 = hasher
 TARGET2 = titan
 TARGET2_DEBUG = titan.debug
-TARGET2_BASELINE = baseline
-TARGET2_PRINT = titan.print
-TARGET2_BASELINE_PRINT = baseline.print
 
 
 # Sources, objects and dependencies files
@@ -60,6 +57,19 @@ DEPS_FILE = .depend
 LIB_FRONTEND = src/libbwa.a
 
 
+# Compile rules
+
+-include $(DEPS_FILE)
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+%.o: %.cu
+	$(NVCC) $(NVFLAGS) -c -o $@ $<
+%.debug.o: %.cu
+	$(NVCC) $(NVFLAGS_DEBUG) -c -o $@ $<
+
 # Default rule
 all: depend $(TARGET1) $(TARGET2)
 
@@ -85,18 +95,6 @@ $(CU_DEBUG_OBJECTS_LINKER): $(CU_DEBUG_OBJECTS)
 	$(NVCC) $(__NVFLAGS) --device-link $^ --output-file $@
 
 
-# Compile rules
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-%.o: %.cu
-	$(NVCC) $(NVFLAGS) -c -o $@ $<
-%.debug.o: %.cu
-	$(NVCC) $(NVFLAGS_DEBUG) -c -o $@ $<
-%.baseline.o: %.cu
-	$(NVCC) $(NVFLAGS_BASELINE) -c -o $@ $<
-
 #########################################################################################
 # Make rules
 #########################################################################################
@@ -114,33 +112,27 @@ build: $(EXE)
 clean:
 	rm *sam *out *err
 
-largeclean:
-	rm -f $(CU_DEBUG_OBJECTS_LINKER) $(CU_OBJECTS_LINKER) $(CU_BASELINE_OBJECTS_LINKER) $(CU_BASELINE_OBJECTS) $(CU_DEBUG_OBJECTS) $(CU_OBJECTS) $(CPP_OBJECTS) $(C_OBJECTS) $(TARGET1) $(TARGET2) $(DEPS_FILE)
-	rm -f $(EVALSUBDIR)/*
-	rm -f temp*
-	$(MAKE) -C ../bwa-mem2 clean
-	rm -f ../bwa-mem2/$(EVALSUBDIR)/*
+cleanlarge:
+	rm -f $(CU_DEBUG_OBJECTS_LINKER) $(CU_OBJECTS_LINKER) $(CU_DEBUG_OBJECTS) $(CU_OBJECTS) $(CPP_OBJECTS) $(C_OBJECTS) $(TARGET1) $(TARGET2) $(DEPS_FILE)
+	#$(MAKE) -C ../bwa-mem2 clean
+	#rm -f ../bwa-mem2/$(EVALSUBDIR)/*
 
 
 # Depend rule
 depend:
 	@echo "Generating dependencies..."
-	@$(CXX) -MM $(CPP_SOURCES) -Isrc > $(DEPS_FILE)
-	@$(CC) -MM $(C_SOURCES) -Isrc >> $(DEPS_FILE)
-	@$(NVCC) -MM $(CU_SOURCES) -Isrc >> $(DEPS_FILE)
+	@$(CXX) -MM $(CPP_SOURCES) $(INCLUDES) > $(DEPS_FILE)
+	@$(CC) -MM $(C_SOURCES) $(INCLUDES) >> $(DEPS_FILE)
+	@$(NVCC) -MM $(CU_SOURCES) $(INCLUDES) >> $(DEPS_FILE)
 
 
 # Phony label
 .PHONY: all clean depend
 
+###########################################################################
 
 # For debugging this build system 
 debug_make: $(CU_DEBUG_OBJECTS)
 	@echo "Compiled cuda object files."
 
 compile: $(CPP_OBJECTS)
-
-
-# Dependencies
--include $(DEPS_FILE)
-#EOD

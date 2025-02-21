@@ -1,1 +1,4 @@
 baseline SMEM seeding does not skip N at the read[0]
+fix batching bugs & memory bugs for large data experiment
+12core CPU 15x -> 32core CPU 1.7x? not 6x? clarify
+1/2/4 GPU vs 12(i7)/32(cluster01)/64(fpga)core CPU

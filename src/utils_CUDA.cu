@@ -1,30 +1,28 @@
 #include "bwa.h"
 #include "macro.h"
-#include "printintermediates.cuh"
+#include "utils_CUDA.cuh"
 
-__device__ __constant__ char *printidentifiers[] = {
-    /*  SMINTV  */  "SMintv",
-    /*  CHINTV  */  "CHintv",
-    /*  CHSEED_ */  "CHseed_",
-    /*  CHSEED  */  "CHseed",
-    /*  CHCHAIN */  "CHchain",
-    /*  SWCHAIN */  "SWchain",
-    /*  SWPAIR  */  "SWpair",
-    /*  SWREG_  */  "SWreg_",
-    /*  SWREG   */  "SWreg",
-    /*  ANREG   */  "ANreg",
-    /*  ANPAIR  */  "ANpair",
-    /*  ANALN_  */  "ANaln_",
-    /*  ANALN   */  "ANaln",
-    /*  EESCORE */  "EEscore",
-    /*  FLATINTV */  "FLATintv",
-    /*  UUT */  "UUT",
-    /*  STCHAIN */  "SortedCHchain",
-    /*  STSEED */  "stseed",
-
+__device__ const char * const phasename[] = {
+     /* _DETAIL     */ "dummy",
+     /* _STAGE_TIME */ "dummy",
+     /* _STEP_TIME  */ "dummy",
+     /* _SMEM       */ "smem",
+     /* _INTV       */ "intv",
+     /* _SEED       */ "seed",
+     /* _STSEED     */ "stseed",
+     /* _CHAIN      */ "chain",
+     /* _STCHAIN    */ "stchain",
+     /* _FTCHAIN    */ "ftchain",
+     /* _EXPAIR     */ "expair",
+     /* _REGION     */ "region",
+     /* _FTREGION   */ "ftregion",
+     /* _STREGION   */ "stregion",
+     /* _TBPAIR     */ "tbpair",
+     /* _ALIGNMENT  */ "alignment",
+     /* _RESULT     */ "result",
 };
 
-// format: [ID readID] qbeg qend num_hits sa_k
+// format: phase readID qbeg qend num_hits sa_k
 __global__ void printIntv(smem_aux_t *d_intvvecs, int readID, int type)
 {
     if(blockIdx.x != 0 || threadIdx.x != 0) {
@@ -37,7 +35,7 @@ __global__ void printIntv(smem_aux_t *d_intvvecs, int readID, int type)
     //printf("DEBUG1 num_seeds %d\n", num_intv);
     for(bwtintv_t *intv = intvs; intv < intvs + num_intv; intv++) {
         if(intv->x[2] > 0) {
-            printf("%s %d %d %d %d %lu\n", printidentifiers[type], readID, \
+            printf("%s %d %d %d %d %lu\n", phasename[type], readID, \
                     M(*intv), N(*intv), (int)intv->x[2],\
                     intv->x[0]);
         } else { // SMEM and each reseed types are 0-separated.
@@ -48,7 +46,7 @@ __global__ void printIntv(smem_aux_t *d_intvvecs, int readID, int type)
 }
 
 
-// format: [ID readID] rbeg len qbeg
+// format: phase readID rbeg len qbeg
 __global__ void printSeed(mem_seed_v *d_seedvecs, int readID, int type)
 {
     if(blockIdx.x != 0 || threadIdx.x != 0) {
@@ -57,15 +55,14 @@ __global__ void printSeed(mem_seed_v *d_seedvecs, int readID, int type)
 
     mem_seed_t *seedvec = d_seedvecs[readID].a;
     int num_seeds = d_seedvecs[readID].n;
-    printf("ppn_seeds %d %d\n", readID, num_seeds);
     for(mem_seed_t *seed = seedvec; seed < seedvec + num_seeds; seed++) {
-        printf("%s %d %ld %d %d\n", printidentifiers[type], readID,\
+        printf("%s %d %ld %d %d\n", phasename[type], readID,\
                 seed->rbeg, seed->len, seed->qbeg);
     }
 }
 
 
-// format: [ID readID] rpos weight num_seeds
+// format: phase readID rpos weight num_seeds
 __global__ void printChain(mem_chain_v *d_chainvecs, int readID, int type)
 {
     if(blockIdx.x != 0 || threadIdx.x != 0) {
@@ -75,7 +72,7 @@ __global__ void printChain(mem_chain_v *d_chainvecs, int readID, int type)
     mem_chain_t *chainvec = d_chainvecs[readID].a;
     int num_chains = d_chainvecs[readID].n;
     for(mem_chain_t *chain = chainvec; chain < chainvec + num_chains; chain++) {
-        printf("%s %d %ld %u %d\n", printidentifiers[type], readID,\
+        printf("%s %d %ld %u %d\n", phasename[type], readID,\
                 chain->pos, chain->w, chain->n);
     }
 }
@@ -89,10 +86,10 @@ __global__ void printPair(seed_record_t *d_pairs, int num_records, int type)
         return;
     }
 
-    if(type==SWPAIR) {
+    if(type == _EXPAIR) {
         for(seed_record_t *record = d_pairs; record < d_pairs + num_records;\
                 record++) {
-            printf("%s %d ", printidentifiers[type], record->seqID);
+            printf("%s %d ", phasename[type], record->seqID);
             if(record->readlen_left == 0) {
                 printf("- -");
             } else {
@@ -122,14 +119,14 @@ __global__ void printPair(seed_record_t *d_pairs, int num_records, int type)
             }
             printf("\n");
         }
-    } else { // ANPAIR
+    } else { // _TBPAIR
         for(seed_record_t *record = d_pairs; record < d_pairs + num_records;\
                 record++) {
                 //printf("(%d %d %d %d)\n", record->readlen_left, record->reflen_left,\
                 record->readlen_right, record->reflen_right);
                 //printf("(%p %p %p %p)\n", record->read_left, record->ref_left,\
                 record->read_right, record->ref_right);
-            printf("%s %d ", printidentifiers[type], record->seqID);
+            printf("%s %d ", phasename[type], record->seqID);
             if(record->readlen_right == 0 || !(record->read_right)) {
                 printf("-");
             } else {
@@ -153,7 +150,7 @@ __global__ void printPair(seed_record_t *d_pairs, int num_records, int type)
 }
 
 
-// format: [ID readID] rb re qb qe score w seedcov frac_rep seedlen0
+// format: phase readID rb re qb qe score w seedcov frac_rep seedlen0
 __global__ void printReg(mem_alnreg_v *d_regvecs, int readID, int type)
 {
     if(blockIdx.x != 0 || threadIdx.x != 0) {
@@ -163,14 +160,14 @@ __global__ void printReg(mem_alnreg_v *d_regvecs, int readID, int type)
     for(mem_alnreg_t *reg = d_regvecs[readID].a;\
             reg < d_regvecs[readID].a + d_regvecs[readID].n; reg++) {
 
-        printf("%s %d %ld %ld %d %d %d %d %d %f %d\n", printidentifiers[type],\
+        printf("%s %d %ld %ld %d %d %d %d %d %f %d\n", phasename[type],\
                 readID, reg->rb, reg->re, reg->qb, reg->qe, reg->score, reg->w,\
                 reg->seedcov, reg->frac_rep, reg->seedlen0);
     }
 }
 
 
-// format: [ID readID] rname rpos cigarstring
+// format: phase readID rname rpos cigarstring
 __global__ void printAln(bntseq_t *d_bns, mem_aln_v *d_alnvecs, int readID, int type)
 {
     if(blockIdx.x != 0 || threadIdx.x != 0) {
@@ -180,7 +177,7 @@ __global__ void printAln(bntseq_t *d_bns, mem_aln_v *d_alnvecs, int readID, int 
 #define BAM2OP(bam)     ((char)("MIDSH"[(int)bam&0xf])) 
     for(mem_aln_t *aln = d_alnvecs[readID].a;\
             aln < d_alnvecs[readID].a + d_alnvecs[readID].n; aln++) {
-        printf("%d %s %ld ", readID+1, d_bns->anns[aln->rid].name, aln->pos+1); //1-based rpos
+        printf("%s %d %s %ld ", phasename[type], readID+1, d_bns->anns[aln->rid].name, aln->pos+1); //1-based rpos
         for(uint32_t *bam = aln->cigar; bam < aln->cigar + aln->n_cigar;\
                 bam++) {
             printf("%d%c", BAM2LEN(*bam), BAM2OP(*bam));
@@ -188,7 +185,6 @@ __global__ void printAln(bntseq_t *d_bns, mem_aln_v *d_alnvecs, int readID, int 
         printf("\n");
     }
     if(d_alnvecs[readID].n == 0) {
-        //printf("[%s %d] - - -\n", printidentifiers[type], readID);
         printf("%d -1 -1\n", readID+1);
     }
 }

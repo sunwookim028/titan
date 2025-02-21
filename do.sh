@@ -10,7 +10,7 @@ phase="$2"
 
 
 # work
-work.sh run ${name} 1024
+work.sh run ${name} 16
 
 
 # do
@@ -28,3 +28,4 @@ sed -n "$linebegB,$lineendB p" ${name}.out | grep "^${phase} " | sed "s/^${phase
 
 # grade
 grade.py ${name} ${phase}
+grade.py ${name} ${phase} 1 # w/o cigar
