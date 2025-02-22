@@ -1,1 +1,1 @@
-work.sh run 100bp 1m 1 0 1 2
+bash work.sh profile_run 76bp 1m 1 0 2

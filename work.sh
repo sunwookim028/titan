@@ -70,7 +70,7 @@ if [ $argc -lt 1 ]; then
         usage
         exit 1
 fi
-if [ $cmd == "run" ] && [ $argc -lt $id_first_printid ]; then
+if [ "$cmd" = "run" ] && [ $argc -lt $id_first_printid ]; then
     if [ $argc -gt $(($id_first_printid - 2)) ]; then
         usage_printflags
     else
@@ -96,22 +96,25 @@ fi
 PROG="./titan"
 NAME="$arg2_$arg3"
 ARGS=""
-if [ $arg2 == "ecoli" ]; then
-    ARGS="mem\
-        -g $arg4\
-        $printopt\
-        -o $arg2.sam\
-        ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
-        ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
-        ../input/ecoli/ecoli.$arg3"
-else
-    ARGS="mem\
-        -g $arg4\
-        $printopt\
-        -o $arg2.sam\
-        $(realpath ~/ours/input/index/hg38.fa)\
-        $(realpath ~/ours/input/index/hg38.hash)\
-        $(realpath ~/reads/$arg2.$arg3)"
+if [ "$arg1" != "profile" ]; then
+    if [ "$arg2" = "ecoli" ]; then
+        ARGS="mem\
+            -g $arg4\
+            $printopt\
+            -o $arg2.sam\
+            ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
+            ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
+            ../input/ecoli/ecoli.$arg3"
+
+    else
+        ARGS="mem\
+            -g $arg4\
+             $printopt\
+            -o $arg2.sam\
+            $(realpath ~/ours/input/index/hg38.fa)\
+            $(realpath ~/ours/input/index/hg38.hash)\
+            $(realpath ~/reads/$arg2.$arg3)"
+    fi
 fi
 #"g3 additional options:"
 #"		-l: print times"
@@ -185,8 +188,34 @@ sanitize() {
 }
 
 
+profile_run() {
+    if [ "$arg2" = "ecoli" ]; then
+        ARGS="mem\
+            -g $arg4\
+            -b\
+            $printopt\
+            -o $arg2.sam\
+            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
+            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
+            /sunwookim028/prior/input/ecoli/ecoli.$arg3"
+
+    else
+        ARGS="mem\
+            -g $arg4\
+            -b\
+            $printopt\
+            -o $arg2.sam\
+            /sunwookim028/ours/input/index/hg38.fa\
+            /sunwookim028/ours/input/index/hg38.hash\
+            /sunwookim028/reads/$arg2.$arg3"
+    fi
+
+    echo "$PROG $ARGS"
+    ${PROG} ${ARGS} 2> >(tee $NAME.err >&2) 1>> $NAME.out
+}
+
+
 profile() {
-    # FIXME wrong command (fix script name)
     CUDA_VISIBLE_DEVICES=2 ncu --export $NAME.profile --target-processes all -f --set full bash utils/_ncu.sh
 }
 
@@ -221,6 +250,10 @@ case "$cmd" in
 
     profile)
         profile
+        exit 0;;
+
+    profile_run)
+        profile_run
         exit 0;;
 
     *) 

@@ -81,8 +81,8 @@ static void push(transfer_data_t *tran, superbatch_data_t *loadedinput, int *pus
 
     push_m->lock();
     push_offset = *push_counter;
-    if(*push_counter <= loadedinput->n_reads - 0.9*MB_MAX_COUNT){
-        push_count = 0.9*MB_MAX_COUNT;
+    if(*push_counter <= loadedinput->n_reads - MB_MAX_COUNT){
+        push_count = MB_MAX_COUNT;
     } else if(*push_counter < loadedinput->n_reads){
         push_count = loadedinput->n_reads - *push_counter;
     } else{

@@ -1,2 +1,14 @@
 76bp SC 1m 4GPU 0.71s
 76bp 128m_sim SC 1 GPU 323.2s walltime
+76bp 128m_sim SC 4 GPU 82.5s walltime
+76bp 1m SC 4 GPU 1.04s
+100bp 1m SC 4 GPU 1.13s
+100bp 1m SC 1 GPU 3.07s
+76bp 1m SC 1 GPU 2.81s
+76bp 1m 1GPU walltime 3.73s
+100bp 1m 1GPU walltime 4.38s
+100bp 1m 4GPU walltime 1.45s
+76bp 1m 4GPU walltime 1.30s
+76bp 128m_sim 128core walltime 502s
+76bp 128m_sim 128core kerneltime 427s
+76bp 1m runs w/o errors

@@ -433,7 +433,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
             << " ms" << std::endl;
     }
 
-#if 0
 
     // (3/3) Extending
     stage_lap = 0;
@@ -723,7 +722,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     // pack alns for transferring.
     //TODO
 
-#endif
 
     TIMER_DESTROY;
     if(PRINT(_BUFFER_USAGE)){
