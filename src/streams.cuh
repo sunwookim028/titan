@@ -28,7 +28,8 @@ extern "C"{
 		const bntseq_t *bns, 
 		const uint8_t *pac,
 		const kmers_bucket_t *kmersHashTab,
-        const fmIndex *hostFmIndex
+        const fmIndex *hostFmIndex,
+        g3_opt_t *g3_opt
 	);
 
     /* intialize a new set for data transfer (disk <-> CPU <-> GPU)
@@ -38,7 +39,9 @@ extern "C"{
      */
     void newTransfer( 
             transfer_data_t **output,
-            int gpu_no);
+            int gpu_no,
+        g3_opt_t *g3_opt
+        );
 
 
     /* swap reads on the process set and the transfer set

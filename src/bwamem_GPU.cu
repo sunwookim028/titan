@@ -69,6 +69,8 @@ using namespace std;
     }\
 }
 
+
+
 #define LAUNCH_CHK_PRINTING(name, stream)\
 {\
     cudaStreamSynchronize(stream);\
@@ -80,6 +82,7 @@ using namespace std;
         exit(EXIT_FAILURE);\
     }\
 }
+
 
 // should match the strings in utils_CUDA.cu
 const char * const h_phasename[] = {
@@ -129,13 +132,13 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 
     // Initialize variables for aligning this batch of read sequences.
     if((n_seqs = proc->n_seqs) == 0){
-        gpuErrchk( cudaStreamSynchronize(*(cudaStream_t*)proc->CUDA_stream) );
+        //gpuErrchk( cudaStreamSynchronize(*(cudaStream_t*)proc->CUDA_stream) );
         return;
     }
     if(PRINT(_DETAIL)){
          std::cerr << "GPU " << gpuid << "  " << "Aligning " << n_seqs << " seqs" << std::endl;
     }
-    CUDAResetBufferPool(proc->d_buffer_pools);
+    CUDAResetBufferPool(proc->d_buffer_pools, g3_opt->batch_size);
     gpuErrchk( cudaMemset(proc->d_Nseeds, 0, sizeof(int)) );
 
     TIMER_INIT; // This should be placed after setting GPU.
@@ -454,7 +457,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 
     if(num_seeds_to_extend==0){
         proc->n_processed += proc->n_seqs;
-        gpuErrchk( cudaStreamSynchronize(*(cudaStream_t*)proc->CUDA_stream) );
+        //gpuErrchk( cudaStreamSynchronize(*(cudaStream_t*)proc->CUDA_stream) );
         return;
     }
 
@@ -521,8 +524,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
         }
     }
 
-
-#if 0
     // remove duplicates
     TIMER_START(lap);
     filterRegions <<< n_seqs, 320, 0, *(cudaStream_t*)proc->CUDA_stream >>> (
@@ -532,7 +533,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
         GET_LAST_ERR();
     TIMER_END(lap);
     LAUNCH_CHK("E filter region", *(cudaStream_t*)proc->CUDA_stream);
-
 
     if(PRINT(_STEP_TIME)){
          std::cerr << "GPU " << gpuid << "  " << "Local extending (filter & mark primary regions): " << lap 
@@ -583,7 +583,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
     // Extending -> Traceback (2/2)
     step_lap = 0;
 
-#endif
     TIMER_START(lap);
     gpuErrchk2( cudaMemset(proc->d_Nseeds, 0, sizeof(int)));
 
@@ -597,7 +596,7 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 
     if(num_seeds_to_extend==0){
         proc->n_processed += proc->n_seqs;
-        gpuErrchk( cudaStreamSynchronize(*(cudaStream_t*)proc->CUDA_stream) );
+        //gpuErrchk( cudaStreamSynchronize(*(cudaStream_t*)proc->CUDA_stream) );
         return;
     }
 
@@ -681,7 +680,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
         }
     }
 
-
     TIMER_START(lap);
     finalize<<< ceil((float)num_seeds_to_extend / WARPSIZE) == 0 ? 1 : ceil((float)num_seeds_to_extend / WARPSIZE), WARPSIZE, 0, *(cudaStream_t*)proc->CUDA_stream >>>(
             proc->d_opt, proc->d_bns, proc->d_seqs,
@@ -721,7 +719,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt)
 
     // pack alns for transferring.
     //TODO
-
 
     TIMER_DESTROY;
     if(PRINT(_BUFFER_USAGE)){

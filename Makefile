@@ -1,7 +1,7 @@
 # Compilers and flags
 INCLUDES = -Isrc -Iext/zlib-1.3.1 -Iext/safestringlib/include -Iext/bwa-mem2/include
 CXX = g++
-CXXFLAGS = -Wall -O2 -std=c++11 $(INCLUDES)-MMD -MP
+CXXFLAGS = -Wall -O2 -std=c++11 $(INCLUDES) -MMD -MP
 CC = gcc
 CFLAGS = -Wall -Wno-unused-function -O2 $(INCLUDES) -lm -DUSE_MALLOC_WRAPPERS -MMD -MP
 NVCC = /usr/local/cuda-12.1/bin/nvcc

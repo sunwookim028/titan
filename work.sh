@@ -8,12 +8,13 @@ arg1="$1"
 arg2="$2"
 arg3="$3"
 arg4="$4"
+arg5="$5"
 cmd="$arg1"
-id_first_printid="5"
+id_first_printid="6"
 
 # global usage
 usage() {
-    echo "usage: $0 {slurm|prep|run|debug|sanitize|profile|help} {ecoli|76bp|100bp|152bp} {100k|1m|...|full} {1|2|3|4} {printing selection}"
+    echo "usage: $0 {slurm|prep|run|debug|sanitize|profile|help} {ecoli|76bp|100bp|152bp} {100k|1m|...|full} {1|2|3|4} {400000|800000|...} {printing selection}"
     echo ""
     echo "Commands:"
     echo "  slurm       Execute $0/../_slurm.sh through the slurm system."
@@ -35,10 +36,12 @@ usage() {
     echo ""
     echo "  1|2|3|4     Number of GPUs to use"
     echo ""
+    echo "  400000...   Batch size in numbers"
+    echo ""
     echo ""
     echo "Example:"
-    echo "  work.sh run 76bp 1m 4"
-    echo "  : this BWA-MEM aligns 1m 76bp reads on 4 GPUs"
+    echo "  work.sh run 76bp 1m 4 800000"
+    echo "  : this BWA-MEM aligns 1m 76bp reads on 4 GPUs with each B=800k."
     echo "    (assumes reads located at ~/reads/76bp.1m)"
     echo ""
 }
@@ -94,12 +97,13 @@ fi
 
 # preset args
 PROG="./titan"
-NAME="$arg2_$arg3"
+NAME="$arg2_$arg3_$arg5"
 ARGS=""
 if [ "$arg1" != "profile" ]; then
     if [ "$arg2" = "ecoli" ]; then
         ARGS="mem\
             -g $arg4\
+            -Z $arg5\
             $printopt\
             -o $arg2.sam\
             ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
@@ -109,6 +113,8 @@ if [ "$arg1" != "profile" ]; then
     else
         ARGS="mem\
             -g $arg4\
+            -Z $arg5\
+            -b\
              $printopt\
             -o $arg2.sam\
             $(realpath ~/ours/input/index/hg38.fa)\
@@ -192,6 +198,33 @@ profile_run() {
     if [ "$arg2" = "ecoli" ]; then
         ARGS="mem\
             -g $arg4\
+            -Z $arg5\
+            $printopt\
+            -o $arg2.sam\
+            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
+            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
+            /sunwookim028/prior/input/ecoli/ecoli.$arg3"
+
+    else
+        ARGS="mem\
+            -g $arg4\
+            -Z $arg5\
+            $printopt\
+            -o $arg2.sam\
+            /sunwookim028/ours/input/index/hg38.fa\
+            /sunwookim028/ours/input/index/hg38.hash\
+            /sunwookim028/reads/$arg2.$arg3"
+    fi
+
+    echo "$PROG $ARGS"
+    ${PROG} ${ARGS} 2> >(tee $NAME.err >&2) 1>> $NAME.out
+}
+
+profile_run_base() {
+    if [ "$arg2" = "ecoli" ]; then
+        ARGS="mem\
+            -g $arg4\
+            -Z $arg5\
             -b\
             $printopt\
             -o $arg2.sam\
@@ -202,6 +235,7 @@ profile_run() {
     else
         ARGS="mem\
             -g $arg4\
+            -Z $arg5\
             -b\
             $printopt\
             -o $arg2.sam\
@@ -254,6 +288,10 @@ case "$cmd" in
 
     profile_run)
         profile_run
+        exit 0;;
+
+    profile_run_base)
+        profile_run_base
         exit 0;;
 
     *) 

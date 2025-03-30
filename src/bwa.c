@@ -161,20 +161,25 @@ void bseq_read2(unsigned long long chunk_size, unsigned long long *n_, void *ks1
 	n = 0;
 	bseq1_t *seqs = transfer_data->reads;
 	while (kseq_read(ks) >= 0) {
+        /*
 		if (ks2 && kseq_read(ks2) < 0) { // the 2nd file has fewer reads
 			fprintf(stderr, "[W::%s] the 2nd file has fewer sequences.\n", __func__);
 			break;
 		}
+        */
 		trim_readno(&ks->name);
 		kseq2bseq2(ks, &seqs[n], transfer_data, g3_opt);
 		seqs[n].id = n;
-		size += seqs[n++].l_seq;
+		size += seqs[n].l_seq;
+        n++;
+        /*
 		if (ks2) {
 			trim_readno(&ks2->name);
 			kseq2bseq2(ks2, &seqs[n], transfer_data, g3_opt);
 			seqs[n].id = n;
 			size += seqs[n++].l_seq;
 		}
+        */
 		if (size >= chunk_size && (n&1) == 0) break;
 		if (   n>=SB_MAX_COUNT
 			|| transfer_data->name_size >SB_NAME_LIMIT-100
@@ -182,10 +187,12 @@ void bseq_read2(unsigned long long chunk_size, unsigned long long *n_, void *ks1
 			|| transfer_data->seqs_size>SB_SEQ_LIMIT-SEQ_MAXLEN
 			|| transfer_data->qual_size>SB_QUAL_LIMIT-SEQ_MAXLEN)  break;
 	}
+    /*
 	if (size == 0) { // test if the 2nd file is finished
 		if (ks2 && kseq_read(ks2) >= 0)
 			fprintf(stderr, "[W::%s] the 1st file has fewer sequences.\n", __func__);
 	}
+    */
 	*n_ = n;
 	return;
 }

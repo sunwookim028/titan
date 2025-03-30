@@ -129,60 +129,61 @@ static void transferOptions(
 	process_instance->h_pes0 = pes0;
 }
 
-inline int allocateAuxIntervals(process_data_t *process_instance)
+inline int allocateAuxIntervals(process_data_t *process_instance, g3_opt_t *g3_opt)
 {
     smem_aux_t *h_aux;
     smem_aux_t *d_aux; 
-    h_aux = (smem_aux_t*)malloc(sizeof(smem_aux_t) * MB_MAX_COUNT);
+    h_aux = (smem_aux_t*)malloc(sizeof(smem_aux_t) * g3_opt->batch_size);
     if(h_aux == nullptr)
     {
         fprintf(stderr, "malloc error at [%s], h_aux\n", __func__);
         exit(1);
     }
-    gpuErrchk( cudaMalloc((void**)&d_aux, sizeof(smem_aux_t) * MB_MAX_COUNT) );
+    gpuErrchk( cudaMalloc((void**)&d_aux, sizeof(smem_aux_t) * g3_opt->batch_size) );
 
-    gpuErrchk( cudaMemcpy(d_aux, h_aux, sizeof(smem_aux_t) * MB_MAX_COUNT, cudaMemcpyHostToDevice) );
+    gpuErrchk( cudaMemcpy(d_aux, h_aux, sizeof(smem_aux_t) * g3_opt->batch_size, cudaMemcpyHostToDevice) );
     process_instance->d_aux = d_aux;
     free(h_aux);
-    return sizeof(bwtintv_t) * MB_MAX_COUNT; 
+    return sizeof(bwtintv_t) * g3_opt->batch_size; 
 }
 
 
 /* allocate memory for intermediate data on GPU
 	send pointer to process_instance
  */
-void allocateIntermediateData(process_data_t *process_instance){
+void allocateIntermediateData(process_data_t *process_instance, g3_opt_t *g3_opt){
     auto old_value = bwa_verbose;
     bwa_verbose = 3;
-	unsigned long long total_size = MB_MAX_COUNT*sizeof(smem_aux_t) + MB_MAX_COUNT*sizeof(mem_seed_v) + MB_MAX_COUNT*sizeof(mem_chain_v) + MB_MAX_COUNT*500*sizeof(seed_record_t) + MB_MAX_COUNT*sizeof(mem_alnreg_v) + MB_MAX_COUNT*sizeof(mem_aln_v) + 4*5*MB_MAX_COUNT*sizeof(int);
+	unsigned long long total_size = (g3_opt->batch_size) *sizeof(smem_aux_t) + (g3_opt->batch_size) *sizeof(mem_seed_v) + (g3_opt->batch_size) *sizeof(mem_chain_v) + (g3_opt->batch_size) *500*sizeof(seed_record_t) + (g3_opt->batch_size) *sizeof(mem_alnreg_v) + (g3_opt->batch_size) *sizeof(mem_aln_v) + 4*5*(g3_opt->batch_size) *sizeof(int);
 	fprintf(stderr, "[M::%-25s] total intermediate data ..... %.2f MB\n", __func__, (float)total_size/MB_SIZE);
+	fprintf(stderr, "[M::%-25s] pre-allocating device memory to align batch of%ld reads...\n", __func__, (g3_opt->batch_size) );
 
-    auto size1 = allocateAuxIntervals(process_instance);
+    auto size1 = allocateAuxIntervals(process_instance, g3_opt);
 	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** aux intervals ..... %.2f MB\n", __func__, size1/GB_SIZE); // = (24,916 + 378) * MBSIZE (B)
-	//gpuErrchk( cudaMalloc((void**)&(process_instance->d_aux), MB_MAX_COUNT*sizeof(smem_aux_t)) );
+	//gpuErrchk( cudaMalloc((void**)&(process_instance->d_aux), (g3_opt->batch_size) *sizeof(smem_aux_t)) );
 
-	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** seeds array  ...... %ld MB\n", __func__, MB_MAX_COUNT*sizeof(mem_seed_v)/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&(process_instance->d_seq_seeds), MB_MAX_COUNT*sizeof(mem_seed_v)) );
+	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** seeds array  ...... %ld MB\n", __func__, (g3_opt->batch_size) *sizeof(mem_seed_v)/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&(process_instance->d_seq_seeds), (g3_opt->batch_size) *sizeof(mem_seed_v)) );
 
-	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** chains ............ %ld MB\n", __func__, MB_MAX_COUNT*sizeof(mem_chain_v)/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&(process_instance->d_chains), MB_MAX_COUNT*sizeof(mem_chain_v)) );
+	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** chains ............ %ld MB\n", __func__, (g3_opt->batch_size) *sizeof(mem_chain_v)/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&(process_instance->d_chains), (g3_opt->batch_size) *sizeof(mem_chain_v)) );
 
-	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** seed records ...... %ld MB\n", __func__, MB_MAX_COUNT*500*sizeof(seed_record_t)/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&(process_instance->d_seed_records), MB_MAX_COUNT*MAX_NUM_SW_SEEDS*sizeof(seed_record_t)) );	// allocate enough for all seeds
+	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** seed records ...... %ld MB\n", __func__, (g3_opt->batch_size) *500*sizeof(seed_record_t)/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&(process_instance->d_seed_records), (g3_opt->batch_size) *MAX_NUM_SW_SEEDS*sizeof(seed_record_t)) );	// allocate enough for all seeds
 
 	gpuErrchk( cudaMalloc((void**)&(process_instance->d_Nseeds), sizeof(int)) );
 
-	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** alignment regs .... %ld MB\n", __func__, MB_MAX_COUNT*sizeof(mem_alnreg_v)/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&(process_instance->d_regs), MB_MAX_COUNT*sizeof(mem_alnreg_v)) );
+	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** alignment regs .... %ld MB\n", __func__, (g3_opt->batch_size) *sizeof(mem_alnreg_v)/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&(process_instance->d_regs), (g3_opt->batch_size) *sizeof(mem_alnreg_v)) );
 
-	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** alignments ...... %ld MB\n", __func__, MB_MAX_COUNT*sizeof(mem_aln_v)/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&(process_instance->d_alns), MB_MAX_COUNT*sizeof(mem_aln_v)) );
+	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** alignments ...... %ld MB\n", __func__, (g3_opt->batch_size) *sizeof(mem_aln_v)/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&(process_instance->d_alns), (g3_opt->batch_size) *sizeof(mem_aln_v)) );
 
-	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** sorting keys .... %ld MB\n", __func__, 4*5*MB_MAX_COUNT*sizeof(int)/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&process_instance->d_sortkeys_in, MB_MAX_COUNT*5*sizeof(int)) );
-	gpuErrchk( cudaMalloc((void**)&process_instance->d_sortkeys_out, MB_MAX_COUNT*5*sizeof(int)) );
-	gpuErrchk( cudaMalloc((void**)&process_instance->d_seqIDs_in, MB_MAX_COUNT*5*sizeof(int)) );
-	gpuErrchk( cudaMalloc((void**)&process_instance->d_seqIDs_out, MB_MAX_COUNT*5*sizeof(int)) );
+	if (bwa_verbose>=3) fprintf(stderr, "[M::%-25s] *** sorting keys .... %ld MB\n", __func__, 4*5*(g3_opt->batch_size) *sizeof(int)/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&process_instance->d_sortkeys_in, (g3_opt->batch_size) *5*sizeof(int)) );
+	gpuErrchk( cudaMalloc((void**)&process_instance->d_sortkeys_out, (g3_opt->batch_size) *5*sizeof(int)) );
+	gpuErrchk( cudaMalloc((void**)&process_instance->d_seqIDs_in, (g3_opt->batch_size) *5*sizeof(int)) );
+	gpuErrchk( cudaMalloc((void**)&process_instance->d_seqIDs_out, (g3_opt->batch_size) *5*sizeof(int)) );
     bwa_verbose = old_value;
 }
 
@@ -269,7 +270,8 @@ void newProcess(
 	const bntseq_t *bns, 
 	const uint8_t *pac,
 	const kmers_bucket_t *kmerHashTab,
-    const fmIndex *hostFmIndex
+    const fmIndex *hostFmIndex,
+    g3_opt_t *g3_opt
 )
 {
     if(cudaSetDevice(gpuid) != cudaSuccess){
@@ -295,19 +297,19 @@ void newProcess(
     transferFmIndex(instance, hostFmIndex);
 
 	// init memory management
-	instance->d_buffer_pools = CUDA_BufferInit();
+	instance->d_buffer_pools = CUDA_BufferInit(g3_opt->batch_size);
 
 	// initialize intermediate processing memory on device
-	allocateIntermediateData(instance);
+	allocateIntermediateData(instance, g3_opt);
 
 	// initialize pinned memory for reads on host
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seqs, MB_MAX_COUNT*sizeof(bseq1_t)) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_name_ptr, MB_NAME_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_comment_ptr, MB_COMMENT_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_seq_ptr, MB_SEQ_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_qual_ptr, MB_QUAL_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_sam_ptr, MB_SAM_LIMIT) );
-
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seqs, (g3_opt->batch_size)*sizeof(bseq1_t)) );
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_name_ptr, (g3_opt->batch_size) * 1 ));
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_comment_ptr, (g3_opt->batch_size) * 1) );
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_seq_ptr, (g3_opt->batch_size) * SEQ_MAXLEN ));
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_qual_ptr, (g3_opt->batch_size) * SEQ_MAXLEN ));
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_sam_ptr, (g3_opt->batch_size) ));
+	
 	if (instance->h_seqs == nullptr || instance->h_seq_name_ptr == nullptr ||
 		instance->h_seq_comment_ptr == nullptr || instance->h_seq_seq_ptr == nullptr ||
 		instance->h_seq_qual_ptr == nullptr || instance->h_seq_sam_ptr == nullptr)
@@ -317,14 +319,14 @@ void newProcess(
     }
 
 	// initialize memory for reads on device
-	unsigned long long total_size = MB_MAX_COUNT*sizeof(bseq1_t) + MB_NAME_LIMIT + MB_COMMENT_LIMIT + MB_SEQ_LIMIT + MB_QUAL_LIMIT + MB_SAM_LIMIT;
-	fprintf(stderr, "[M::%-25s] d_seqs (process) . %llu MB\n", __func__, total_size/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&instance->d_seqs, MB_MAX_COUNT*sizeof(bseq1_t)) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_name_ptr, MB_NAME_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_comment_ptr, MB_COMMENT_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_seq_ptr, MB_SEQ_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_qual_ptr, MB_QUAL_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_sam_ptr, MB_SAM_LIMIT) );
+	unsigned long long total_size = g3_opt->batch_size*(sizeof(bseq1_t) + 1 + 1 + SEQ_MAXLEN + SEQ_MAXLEN + 1);
+	fprintf(stderr, "[M::%-25s] d_seqs (transf) .. %llu MB\n", __func__, total_size/MB_SIZE);
+	gpuErrchk( cudaMalloc((void**)&instance->d_seqs, g3_opt->batch_size*sizeof(bseq1_t)) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_name_ptr, g3_opt->batch_size * 1) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_comment_ptr, g3_opt->batch_size * 1) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_seq_ptr, g3_opt->batch_size * SEQ_MAXLEN) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_qual_ptr, g3_opt->batch_size * SEQ_MAXLEN) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_sam_ptr, g3_opt->batch_size * 1) );
 	gpuErrchk( cudaMalloc((void**)&instance->d_seq_sam_size, sizeof(int)) );
 
 	if (instance->d_seqs == nullptr || instance->d_seq_name_ptr == nullptr ||
@@ -343,7 +345,7 @@ void newProcess(
 }
 
 
-void newTransfer(transfer_data_t **output, int gpuid){
+void newTransfer(transfer_data_t **output, int gpuid, g3_opt_t *g3_opt){
     if(cudaSetDevice(gpuid) != cudaSuccess){
         std::cerr << "newTransfer: cudaSetDevice failed" << std::endl;
         exit(1);
@@ -359,12 +361,12 @@ void newTransfer(transfer_data_t **output, int gpuid){
     instance->gpu_no = gpuid;
 
 	// initialize pinned memory for reads on host
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seqs, MB_MAX_COUNT*sizeof(bseq1_t)) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_name_ptr, MB_NAME_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_comment_ptr, MB_COMMENT_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_seq_ptr, MB_SEQ_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_qual_ptr, MB_QUAL_LIMIT) );
-	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_sam_ptr, MB_SAM_LIMIT) );
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seqs, (g3_opt->batch_size)*sizeof(bseq1_t)) );
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_name_ptr, (g3_opt->batch_size) * 1 ));
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_comment_ptr, (g3_opt->batch_size) * 1) );
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_seq_ptr, (g3_opt->batch_size) * SEQ_MAXLEN ));
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_qual_ptr, (g3_opt->batch_size) * SEQ_MAXLEN ));
+	gpuErrchk( cudaMallocHost((void**)&instance->h_seq_sam_ptr, (g3_opt->batch_size) ));
 	
 	if (instance->h_seqs == nullptr || instance->h_seq_name_ptr == nullptr ||
 		instance->h_seq_comment_ptr == nullptr || instance->h_seq_seq_ptr == nullptr ||
@@ -375,14 +377,14 @@ void newTransfer(transfer_data_t **output, int gpuid){
     }
 
 	// initialize memory for reads on device
-	unsigned long long total_size = MB_MAX_COUNT*sizeof(bseq1_t) + MB_NAME_LIMIT + MB_COMMENT_LIMIT + MB_SEQ_LIMIT + MB_QUAL_LIMIT + MB_SAM_LIMIT;
+	unsigned long long total_size = g3_opt->batch_size*(sizeof(bseq1_t) + 1 + 1 + SEQ_MAXLEN + SEQ_MAXLEN + 1);
 	fprintf(stderr, "[M::%-25s] d_seqs (transf) .. %llu MB\n", __func__, total_size/MB_SIZE);
-	gpuErrchk( cudaMalloc((void**)&instance->d_seqs, MB_MAX_COUNT*sizeof(bseq1_t)) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_name_ptr, MB_NAME_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_comment_ptr, MB_COMMENT_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_seq_ptr, MB_SEQ_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_qual_ptr, MB_QUAL_LIMIT) );
-	gpuErrchk( cudaMalloc((void**)&instance->d_seq_sam_ptr, MB_SAM_LIMIT) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seqs, g3_opt->batch_size*sizeof(bseq1_t)) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_name_ptr, g3_opt->batch_size * 1) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_comment_ptr, g3_opt->batch_size * 1) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_seq_ptr, g3_opt->batch_size * SEQ_MAXLEN) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_qual_ptr, g3_opt->batch_size * SEQ_MAXLEN) );
+	gpuErrchk( cudaMalloc((void**)&instance->d_seq_sam_ptr, g3_opt->batch_size * 1) );
 	gpuErrchk( cudaMalloc((void**)&instance->d_seq_sam_size, sizeof(int)) );
 
 	if (instance->d_seqs == nullptr || instance->d_seq_name_ptr == nullptr ||

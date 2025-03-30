@@ -74,15 +74,15 @@ void copyReads2PinnedMem(superbatch_data_t *superbatch_data, transfer_data_t *tr
  * @param num_loaded number of reads loaded from this superbatch before this minibatch
  * @return int number of reads loaded into transfer_data->n_seqs
  */
-static void push(transfer_data_t *tran, superbatch_data_t *loadedinput, int *push_counter, std::mutex *push_m)
+static void push(transfer_data_t *tran, superbatch_data_t *loadedinput, int *push_counter, std::mutex *push_m, g3_opt_t *g3_opt)
 {
     int push_count;
     int push_offset;
 
     push_m->lock();
     push_offset = *push_counter;
-    if(*push_counter <= loadedinput->n_reads - MB_MAX_COUNT){
-        push_count = MB_MAX_COUNT;
+    if(*push_counter <= loadedinput->n_reads - g3_opt->batch_size){
+        push_count = g3_opt->batch_size;
     } else if(*push_counter < loadedinput->n_reads){
         push_count = loadedinput->n_reads - *push_counter;
     } else{
@@ -177,7 +177,7 @@ static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
         std::cout << "new batch" << std::endl;
         std::thread t_align(bwa_align, gpuid, batch_A, g3_opt);
         pull(batch_B, pull_counter, pull_m);
-        push(batch_B, loadedinput, push_counter, push_m);
+        push(batch_B, loadedinput, push_counter, push_m, g3_opt);
         t_align.join();
 
         swapData(batch_A, batch_B);

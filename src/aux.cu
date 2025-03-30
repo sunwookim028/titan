@@ -1792,7 +1792,7 @@ __global__ void BTreeChaining(
 
         if(start_new_chain){
             if(s.rid<0 || s.rid >= 455){ //FIXME hardcoded err handling
-                printf("sth wrong: s.rid = %d\n", s.rid);
+                //printf("sth wrong: s.rid = %d\n", s.rid);
                 continue;
             }
             tmp.n = 1; tmp.m = SEEDS_PER_CHAIN;

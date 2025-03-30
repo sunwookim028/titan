@@ -193,6 +193,7 @@ typedef struct{
     int verbosity; // messaging level
     int baseline; // align with baseline options
     long int print_mask;
+    int batch_size;
 } g3_opt_t;
 
 

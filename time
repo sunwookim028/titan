@@ -12,3 +12,12 @@
 76bp 128m_sim 128core walltime 502s
 76bp 128m_sim 128core kerneltime 427s
 76bp 1m runs w/o errors
+ecoli 4msim 8GPU kerneltime 607ms
+ecoli 4msim 8GPU largebatch kerneltime 386ms
+ecoli 4msim 8GPU largebatch kerneltime 306ms
+=================
+ecoli 4rtx 47.9s walltime
+ecoli 40m 4a6000 46.1s
+ecoli 8rtx 51s walltime
+ecoli 6rtx 63s walltime
+ecoli 4rtx 48s walltime

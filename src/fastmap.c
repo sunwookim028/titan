@@ -79,7 +79,7 @@ int main_mem(int argc, char *argv[])
     g3_opt_t *g3_opt = g3_opt_init();
 	aux.opt = opt = mem_opt_init();
 	memset(&opt0, 0, sizeof(mem_opt_t));
-	while ((c = getopt(argc, argv, "51qpbaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:g:l:h:y:K:X:H:")) >= 0) {
+	while ((c = getopt(argc, argv, "51qpbaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:g:l:h:y:K:X:H:Z:")) >= 0) {
 		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
 		else if (c == 'b') g3_opt->baseline = 1;
 		else if (c == '1') no_mt_io = 1;
@@ -114,6 +114,10 @@ int main_mem(int argc, char *argv[])
         }
 		else if (c == 'l'){
             g3_opt->print_mask = atoi(optarg);
+        } 
+		else if (c == 'Z'){
+            g3_opt->batch_size = atoi(optarg);
+            fprintf(stderr, "BATCH_SIZE = %d\n", g3_opt->batch_size);
         } 
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
 		else if (c == 'o' || c == 'f'){

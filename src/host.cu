@@ -123,19 +123,22 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
         exit(1);
     }
 
+    // Double buffers to overlap processing and loading the next input batch.
     superbatch_data_t *loaded = newSuperBatchData();
     superbatch_data_t *loading = newSuperBatchData();
 
+    // Double buffers per GPU to overlap processing and communicating,
+    //   results of the previous batch and the next input batch (mini-batch).
     process_data_t *proc[MAX_NUM_GPUS];
     transfer_data_t *tran[MAX_NUM_GPUS];
 
-    // initialize pinned or fixed memory on both host and device 
-    // and transfer index data to each GPU device.
+    // Initialize host and device memory for processing with each GPU.
+    //   Utilizes pinned & fixed memory for optimal I/O performance.
     for(int j=0; j<num_use_gpus; j++){
         newProcess(&proc[j], j, aux->opt, aux->pes0, aux->idx->bwt,\
                 aux->idx->bns, aux->idx->pac, aux->kmerHashTab,\
-                &(aux->loadedIndex));
-        newTransfer(&tran[j], j);
+                &(aux->loadedIndex), g3_opt);
+        newTransfer(&tran[j], j, g3_opt);
         tran[j]->fd_outfile = aux->fd_outfile;
     }
 
@@ -143,16 +146,22 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
     double walltime;
 
     //dataloader(aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loaded, g3_opt);
-    //offloader(loaded, proc, tran, g3_opt);//, superbatch_results[iter]);
 
     long int num_total_reads = 0;
     clock_gettime(CLOCK_REALTIME,  &start);
 
+    //offloader(loaded, proc, tran, g3_opt);//, superbatch_results[iter]);
+
+
+    // Load the next (global) input batch from the host storage
+    //   and process the currently loaded batch using all GPUs.
+    //   The offloader thread handles all communication and kernel invocation
+    //   for GPUs. It also writes results to a single file in host storage.
 #define A 0
 #define B 1
 #define toggle(ab) (1 - (ab))
     int AB = A;
-    do {
+    do { // TODO we want dataloader to be multi-threaded as well.
         std::thread t_dataloader(dataloader, aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loading, g3_opt);
         std::thread t_offloader(offloader, loaded, proc, tran, g3_opt);//, superbatch_results[AB]);
         //std::thread t_storer(storer, aux->fd_outfile, superbatch_results[toggle(AB)]); // possibly merge pulled results
@@ -174,6 +183,8 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
                            (end.tv_nsec - start.tv_nsec) / 1e9;
     fprintf(stderr,"\n\nWall-clock time for processing all %ld reads: %.6lf seconds\n\n\n", num_total_reads, walltime);
 
+
+    // Destroy all generated per-GPU structures.
     for(int j=0; j<num_use_gpus; j++){
         cudaStreamDestroy(*(cudaStream_t*)proc[j]->CUDA_stream);
         cudaStreamDestroy(*(cudaStream_t*)tran[j]->CUDA_stream);

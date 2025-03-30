@@ -1,0 +1,303 @@
+bwa_idx_load_from_disk hint  = ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna
+prefix = ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna
+prefix2 ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna.bwt
+bwa_idx_load_from_disk prefix = ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna
+prefix = ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna
+prefix2 ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna.bwt
+[M::bwa_idx_load_from_disk] read 0 ALT contigs
+* Index file found. Loading index from ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna.counts
+* Reference seq len for bi-index = 9283305
+* Index file found. Loading index from ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna.occ1
+* Index file found. Loading index from ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna.occ2
+* Index file found. Loading index from ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna.sa.v2
+* first base: 0
+* sentinel-index: 1462939
+* Count:
+0,	1
+1,	2284125
+2,	4641653
+3,	6999181
+4,	9283305
+* Count2:
+0,	1
+1,	677591
+2,	1190063
+3,	1664225
+4,	2284125
+5,	2931831
+6,	3473904
+7,	4167491
+8,	4641653
+9,	5176432
+10,	5944636
+11,	6486709
+12,	6999182
+13,	7423230
+14,	7958009
+15,	8605715
+16,	9283305
+* Done reading Index!!
+PROCESSING WITH 8 GPUS, OUT OF 8 GPUS.
+[M::newSuperBatchData        ] allocated 8.34 GB on host for superbatch
+[M::newSuperBatchData        ] allocated 8.34 GB on host for superbatch
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+[M::transferIndex            ] Device memory for Index ...... 11.07 MB 
+[M::transferIndex            ] *** bwt .......... 0.00 MB
+[M::transferIndex            ] *** bwt_int ...... 4.43 MB
+[M::transferIndex            ] *** suffix array . 2.21 MB 
+[M::transferIndex            ] *** bns.anns ..... 0.00 MB
+[M::transferIndex            ] *** bns.ambs ..... 0.00 MB
+[M::transferIndex            ] *** bns .......... 0.00 MB
+[M::transferIndex            ] *** pac .......... 4.43 MB
+[M::transferIndex            ] *** kmer ......... 384.00 MB
+[transferFmIndex] *** one_hot ......... 0.00 MB
+[transferFmIndex] *** cp_occ ......... 8.85 MB
+[transferFmIndex] *** count ......... 0.00 MB
+[transferFmIndex] *** cp_occ2 ......... 35.41 MB
+[transferFmIndex] *** count2......... 0.00 MB
+*******
+transferred sentinel index = 1462939 to device
+*******
+[M::CUDA_BufferInit          ] init buffer ......... 2441 MB
+[M::allocateIntermediateData ] total intermediate data ..... 17207.03 MB
+[M::allocateIntermediateData ] *** aux intervals ..... 0.00 MB
+[M::allocateIntermediateData ] *** seeds array  ...... 9 MB
+[M::allocateIntermediateData ] *** chains ............ 9 MB
+[M::allocateIntermediateData ] *** seed records ...... 17089 MB
+[M::allocateIntermediateData ] *** alignment regs .... 9 MB
+[M::allocateIntermediateData ] *** alignments ...... 9 MB
+[M::allocateIntermediateData ] *** sorting keys .... 48 MB
+[M::newProcess               ] d_seqs (process) . 426 MB
+[M::newTransfer              ] d_seqs (transf) .. 426 MB
+CPU Batch: Processing # 0reads
+main_gcube: loaded->n_reads 4000000
+CPU Batch: Processing # 4000000reads
+GPU 6  Seeding (SMEM seeding + Reseeding): 90.324 ms
+GPU 6  Chaining (B-tree chaining): 16.9278 ms
+GPU 6  Extending (Local extending + Traceback): 19.9987 ms
+GPU 0  Seeding (SMEM seeding + Reseeding): 154.681 ms
+GPU 5  Seeding (SMEM seeding + Reseeding): 167.697 ms
+GPU 4  Seeding (SMEM seeding + Reseeding): 171.897 ms
+GPU 3  Seeding (SMEM seeding + Reseeding): 172.097 ms
+GPU 1  Seeding (SMEM seeding + Reseeding): 174.952 ms
+GPU 2  Seeding (SMEM seeding + Reseeding): 174.851 ms
+GPU 0  Chaining (B-tree chaining): 63.0989 ms
+GPU 5  Chaining (B-tree chaining): 61.2403 ms
+GPU 3  Chaining (B-tree chaining): 61.3428 ms
+GPU 4  Chaining (B-tree chaining): 65.0824 ms
+GPU 1  Chaining (B-tree chaining): 62.5541 ms
+GPU 2  Chaining (B-tree chaining): 65.279 ms
+GPU 0  Extending (Local extending + Traceback): 69.0002 ms
+GPU 5  Extending (Local extending + Traceback): 66.5712 ms
+GPU 3  Extending (Local extending + Traceback): 67.2399 ms
+GPU 1  Extending (Local extending + Traceback): 66.9112 ms
+GPU 4  Extending (Local extending + Traceback): 70.0754 ms
+GPU 2  Extending (Local extending + Traceback): 65.8729 ms
+main_gcube: loaded->n_reads 0
+
+
+Wall-clock time for processing all 4000000 reads: 2.570359 seconds
+
+
+
+
+Wall-clock time after index loading: 6.548126 seconds
+
+
+[main] CMD: ./titan mem -g 8 -l 2 -o ecoli.sam ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash ../input/ecoli/ecoli.4m
+[main] Real time: 6.937 sec; CPU: 8.305 sec

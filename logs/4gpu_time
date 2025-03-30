@@ -1,0 +1,48 @@
+GPU 0  Seeding (SMEM seeding + Reseeding): 186.388 ms
+GPU 1  Seeding (SMEM seeding + Reseeding): 188.202 ms
+GPU 2  Seeding (SMEM seeding + Reseeding): 200.888 ms
+GPU 3  Seeding (SMEM seeding + Reseeding): 198.279 ms
+GPU 1  Chaining (B-tree chaining): 89.1442 ms
+GPU 0  Chaining (B-tree chaining): 90.6292 ms
+GPU 3  Chaining (B-tree chaining): 87.1096 ms
+GPU 2  Chaining (B-tree chaining): 100.27 ms
+GPU 0  Extending (Local extending + Traceback): 45.6866 ms
+GPU 1  Extending (Local extending + Traceback): 48.3141 ms
+GPU 3  Extending (Local extending + Traceback): 44.5611 ms
+GPU 2  Extending (Local extending + Traceback): 47.4356 ms
+GPU 0  Seeding (SMEM seeding + Reseeding): 166.728 ms
+GPU 1  Seeding (SMEM seeding + Reseeding): 174.481 ms
+GPU 3  Seeding (SMEM seeding + Reseeding): 169 ms
+GPU 2  Seeding (SMEM seeding + Reseeding): 171.381 ms
+GPU 0  Chaining (B-tree chaining): 84.6243 ms
+GPU 1  Chaining (B-tree chaining): 87.6233 ms
+GPU 3  Chaining (B-tree chaining): 89.8816 ms
+GPU 2  Chaining (B-tree chaining): 85.2757 ms
+GPU 0  Extending (Local extending + Traceback): 45.1675 ms
+GPU 1  Extending (Local extending + Traceback): 46.3869 ms
+GPU 3  Extending (Local extending + Traceback): 46.037 ms
+GPU 2  Extending (Local extending + Traceback): 44.6422 ms
+GPU 0  Seeding (SMEM seeding + Reseeding): 169.846 ms
+GPU 1  Seeding (SMEM seeding + Reseeding): 174.184 ms
+GPU 3  Seeding (SMEM seeding + Reseeding): 171.021 ms
+GPU 2  Seeding (SMEM seeding + Reseeding): 167.119 ms
+GPU 0  Chaining (B-tree chaining): 83.5861 ms
+GPU 3  Chaining (B-tree chaining): 83.8819 ms
+GPU 1  Chaining (B-tree chaining): 91.8536 ms
+GPU 2  Chaining (B-tree chaining): 87.3018 ms
+GPU 0  Extending (Local extending + Traceback): 44.4647 ms
+GPU 3  Extending (Local extending + Traceback): 45.5269 ms
+GPU 1  Extending (Local extending + Traceback): 46.6689 ms
+GPU 2  Extending (Local extending + Traceback): 46.5163 ms
+GPU 0  Seeding (SMEM seeding + Reseeding): 170.739 ms
+GPU 2  Seeding (SMEM seeding + Reseeding): 109.342 ms
+GPU 3  Seeding (SMEM seeding + Reseeding): 172.084 ms
+GPU 1  Seeding (SMEM seeding + Reseeding): 168.591 ms
+GPU 2  Chaining (B-tree chaining): 68.7052 ms
+GPU 0  Chaining (B-tree chaining): 92.09 ms
+GPU 3  Chaining (B-tree chaining): 90.1384 ms
+GPU 1  Chaining (B-tree chaining): 87.8122 ms
+GPU 2  Extending (Local extending + Traceback): 39.863 ms
+GPU 0  Extending (Local extending + Traceback): 46.5265 ms
+GPU 1  Extending (Local extending + Traceback): 45.4911 ms
+GPU 3  Extending (Local extending + Traceback): 106.962 ms
