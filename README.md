@@ -10,19 +10,6 @@ Seeding (SMEM seeding, Reseeding) -> Chaining (B-tree chaining, auxiliary steps)
 
 \*auxiliary steps: sorting, filtering-out, reversing, deduplicating, translating.
 
-test 
-- Accuracy checkpoints:
-    - [ ] Seeding -> Chaining: seed intervals
-    - [ ] Chaining aux, SA lookup: translated seed positions
-    - [ ] Chaining, B-tree chaining: chain vectors
-    - [ ] Chaining -> Extending: filtered chain vectors
-    - [ ] Extending, Pair generating (1/2): generated pair metadata (positions)
-    - [ ] Extending, Pair generating (2/2): allocated memory, generated pairs
-    - [ ] Extending, @@
-
-- Accuracy tests: **(scripts)**
-
-
 ## Implementation details
 - software modules: frontend (parsing, scheduling), alignment kernels, ADT / memory manip. functions.
 - how to use (scripts / individual library function prototypes): @@.
