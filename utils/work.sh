@@ -96,7 +96,7 @@ else
 fi
 
 # preset args
-PROG="./titan"
+PROG="./g3"
 NAME="$arg2_$arg3_$arg5"
 ARGS=""
 if [ "$arg1" != "profile" ]; then
@@ -106,9 +106,9 @@ if [ "$arg1" != "profile" ]; then
             -Z $arg5\
             $printopt\
             -o $arg2.sam\
-            ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
-            ../input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
-            ../input/ecoli/ecoli.$arg3"
+            /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
+            /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
+            /datasets/bwa/reads/ecoli/ecoli.$arg3"
 
     else
         ARGS="mem\
@@ -117,9 +117,9 @@ if [ "$arg1" != "profile" ]; then
             -b\
              $printopt\
             -o $arg2.sam\
-            $(realpath ~/ours/input/index/hg38.fa)\
-            $(realpath ~/ours/input/index/hg38.hash)\
-            $(realpath ~/reads/$arg2.$arg3)"
+            /datasets/bwa/ref/hg38/hg38.fa)\
+            /datasets/bwa/ref/hg38/hg38.hash)\
+            /datasets/bwa/reads/hg38/$arg2.$arg3)"
     fi
 fi
 #"g3 additional options:"
@@ -201,9 +201,9 @@ profile_run() {
             -Z $arg5\
             $printopt\
             -o $arg2.sam\
-            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
-            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
-            /sunwookim028/prior/input/ecoli/ecoli.$arg3"
+            /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
+            /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
+            /datasets/bwa/reads/ecoli/ecoli.$arg3"
 
     else
         ARGS="mem\
@@ -211,9 +211,9 @@ profile_run() {
             -Z $arg5\
             $printopt\
             -o $arg2.sam\
-            /sunwookim028/ours/input/index/hg38.fa\
-            /sunwookim028/ours/input/index/hg38.hash\
-            /sunwookim028/reads/$arg2.$arg3"
+            /datasets/bwa/ref/hg38/hg38.fa\
+            /datasets/bwa/ref/hg38/hg38.hash\
+            /datasets/bwa/reads/hg38/$arg2.$arg3"
     fi
 
     echo "$PROG $ARGS"
@@ -228,9 +228,9 @@ profile_run_base() {
             -b\
             $printopt\
             -o $arg2.sam\
-            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
-            /sunwookim028/prior/input/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
-            /sunwookim028/prior/input/ecoli/ecoli.$arg3"
+            /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.fna\
+            /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.hash\
+            /datasets/bwa/reads/ecoli/ecoli.$arg3"
 
     else
         ARGS="mem\
@@ -239,9 +239,9 @@ profile_run_base() {
             -b\
             $printopt\
             -o $arg2.sam\
-            /sunwookim028/ours/input/index/hg38.fa\
-            /sunwookim028/ours/input/index/hg38.hash\
-            /sunwookim028/reads/$arg2.$arg3"
+            /datasets/bwa/ref/hg38/hg38.fa\
+            /datasets/bwa/ref/hg38/hg38.hash\
+            /datasets/bwa/reads/hg38/$arg2.$arg3"
     fi
 
     echo "$PROG $ARGS"

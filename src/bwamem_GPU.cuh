@@ -12,7 +12,8 @@
 extern "C"{
 #endif
 	/* align reads and return the size of SAM output */
-	void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt);
+	void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt,
+            double *func_elapsed_ms);
 #ifdef __cplusplus
 } // end extern "C"
 #endif

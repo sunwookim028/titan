@@ -14,6 +14,7 @@
 KSEQ_DECLARE(gzFile)
 
 #define MAX_NUM_GPUS 8
+#define MAX_NUM_STEPS 20
 
 typedef struct
 {
@@ -21,7 +22,8 @@ typedef struct
 	mem_opt_t *opt;
 	mem_pestat_t *pes0;
 	int64_t n_processed;
-	int copy_comment, actual_chunk_size;
+	int copy_comment;
+    long long int loading_batch_size;
 	bwaidx_t *idx;
 	kmers_bucket_t *kmerHashTab;
     fmIndex loadedIndex;

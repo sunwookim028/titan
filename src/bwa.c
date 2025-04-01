@@ -154,45 +154,21 @@ const uint8_t nst_nt4_table[256] = {
 /* 
 	load all data to transfer_data
  */
-void bseq_read2(unsigned long long chunk_size, unsigned long long *n_, void *ks1_, void *ks2_, superbatch_data_t *transfer_data, g3_opt_t *g3_opt)
+void bseq_read2(unsigned long long loading_batch_size, unsigned long long *n_, void *ks1_, void *ks2_, superbatch_data_t *transfer_data, g3_opt_t *g3_opt)
 {
 	kseq_t *ks = (kseq_t*)ks1_, *ks2 = (kseq_t*)ks2_;
-	unsigned long long size = 0, n;
-	n = 0;
+	//unsigned long long size = 0;
+	unsigned long long n = 0;
 	bseq1_t *seqs = transfer_data->reads;
-	while (kseq_read(ks) >= 0) {
-        /*
-		if (ks2 && kseq_read(ks2) < 0) { // the 2nd file has fewer reads
-			fprintf(stderr, "[W::%s] the 2nd file has fewer sequences.\n", __func__);
-			break;
-		}
-        */
+    //fprintf(stderr, "* %s loading_batch_size %ld\n", __func__, loading_batch_size);
+	while(kseq_read(ks) >= 0 && n < loading_batch_size){
 		trim_readno(&ks->name);
 		kseq2bseq2(ks, &seqs[n], transfer_data, g3_opt);
+
 		seqs[n].id = n;
-		size += seqs[n].l_seq;
+		//size += seqs[n].l_seq;
         n++;
-        /*
-		if (ks2) {
-			trim_readno(&ks2->name);
-			kseq2bseq2(ks2, &seqs[n], transfer_data, g3_opt);
-			seqs[n].id = n;
-			size += seqs[n++].l_seq;
-		}
-        */
-		if (size >= chunk_size && (n&1) == 0) break;
-		if (   n>=SB_MAX_COUNT
-			|| transfer_data->name_size >SB_NAME_LIMIT-100
-			|| transfer_data->comment_size>SB_COMMENT_LIMIT-100
-			|| transfer_data->seqs_size>SB_SEQ_LIMIT-SEQ_MAXLEN
-			|| transfer_data->qual_size>SB_QUAL_LIMIT-SEQ_MAXLEN)  break;
 	}
-    /*
-	if (size == 0) { // test if the 2nd file is finished
-		if (ks2 && kseq_read(ks2) >= 0)
-			fprintf(stderr, "[W::%s] the 1st file has fewer sequences.\n", __func__);
-	}
-    */
 	*n_ = n;
 	return;
 }
@@ -383,7 +359,7 @@ char *bwa_idx_infer_prefix(const char *hint)
 	l_hint = strlen(hint);
 	prefix = malloc(l_hint + 3 + 4 + 1);
 	strcpy(prefix, hint);
-    fprintf(stderr, "prefix = %s\n", prefix);
+    //fprintf(stderr, "prefix = %s\n", prefix);
 	strcpy(prefix + l_hint, ".64.bwt");
 	if ((fp = fopen(prefix, "rb")) != 0) {
 		fclose(fp);
@@ -391,7 +367,7 @@ char *bwa_idx_infer_prefix(const char *hint)
 		return prefix;
 	} else {
 		strcpy(prefix + l_hint, ".bwt");
-        fprintf(stderr, "prefix2 %s\n", prefix);
+        //fprintf(stderr, "prefix2 %s\n", prefix);
 		if ((fp = fopen(prefix, "rb")) == 0) {
 			free(prefix);
 			return 0;
@@ -425,9 +401,9 @@ bwaidx_t *bwa_idx_load_from_disk(const char *hint, int which)
 {
 	bwaidx_t *idx;
 	char *prefix;
-    fprintf(stderr, "%s hint  = %s\n", __func__, hint);
+    //fprintf(stderr, "%s hint  = %s\n", __func__, hint);
 	prefix = bwa_idx_infer_prefix(hint);
-    fprintf(stderr, "%s prefix = %s\n", __func__, prefix);
+    //fprintf(stderr, "%s prefix = %s\n", __func__, prefix);
 	if (prefix == 0) {
         fprintf(stderr, "hello.\n");
         fprintf(stderr, "hint: %s\n", hint);

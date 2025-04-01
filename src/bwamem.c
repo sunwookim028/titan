@@ -81,7 +81,7 @@ g3_opt_t *g3_opt_init()
     o->baseline = 0;
     o->verbosity = 0;
     o->print_mask = 0;
-    o->batch_size = 400000;
+    o->batch_size = 80000;
     return o;
 }
 

@@ -26,8 +26,8 @@ ARFLAGS = -csru
 
 # Target executable
 TARGET1 = hasher
-TARGET2 = titan
-TARGET2_DEBUG = titan.debug
+TARGET2 = g3
+TARGET2_DEBUG = g3.debug
 
 
 # Sources, objects and dependencies files

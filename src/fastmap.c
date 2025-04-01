@@ -76,14 +76,16 @@ int main_mem(int argc, char *argv[])
 	memset(pes, 0, 4 * sizeof(mem_pestat_t));
 	for (i = 0; i < 4; ++i) pes[i].failed = 1;
 
+    int loading_factor = 1;
     g3_opt_t *g3_opt = g3_opt_init();
 	aux.opt = opt = mem_opt_init();
 	memset(&opt0, 0, sizeof(mem_opt_t));
-	while ((c = getopt(argc, argv, "51qpbaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:g:l:h:y:K:X:H:Z:")) >= 0) {
+	while ((c = getopt(argc, argv, "51qpbaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:F:T:Q:D:m:I:N:o:f:W:x:G:g:l:h:y:K:X:H:Z:")) >= 0) {
 		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
 		else if (c == 'b') g3_opt->baseline = 1;
 		else if (c == '1') no_mt_io = 1;
 		else if (c == 'x') mode = optarg;
+		else if (c == 'F') loading_factor = atoi(optarg); 
 		else if (c == 'w') opt->w = atoi(optarg), opt0.w = 1;
 		else if (c == 'A') opt->a = atoi(optarg), opt0.a = 1;
 		else if (c == 'B') opt->b = atoi(optarg), opt0.b = 1;
@@ -117,7 +119,7 @@ int main_mem(int argc, char *argv[])
         } 
 		else if (c == 'Z'){
             g3_opt->batch_size = atoi(optarg);
-            fprintf(stderr, "BATCH_SIZE = %d\n", g3_opt->batch_size);
+            fprintf(stderr, "* per GPU batch size = %d\n", g3_opt->batch_size);
         } 
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
 		else if (c == 'o' || c == 'f'){
@@ -167,7 +169,7 @@ int main_mem(int argc, char *argv[])
 				FILE *fp;
 				if ((fp = fopen(optarg, "r")) != 0) {
 					char *buf;
-					buf = calloc(1, 0x10000);
+					buf = (char*)calloc(1, 0x10000);
 					while (fgets(buf, 0xffff, fp)) {
 						i = strlen(buf);
 						assert(buf[i-1] == '\n'); // a long line
@@ -300,29 +302,38 @@ int main_mem(int argc, char *argv[])
 	} else if (bwa_verbose >= 3)
 		fprintf(stderr, "[M::%s] load the bwa index from shared memory\n", __func__);
 
+    // load occ2
+	FMI_wrapper *obj = FMI_wrapper_create(argv[optind]);
+    FMI_wrapper_load_index(obj, &(aux.loadedIndex));
+    fprintf(stderr, "* all idx except kmer hash loaded\n");
 
 	// load kmer hash
-	aux.kmerHashTab = loadKMerIndex(argv[optind + 1]);
+	aux.kmerHashTab = loadKMerIndex(argv[optind++]);
+    fprintf(stderr, "* kmer hash loaded\n");
 
 	if (ignore_alt)
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
 			aux.idx->bns->anns[i].is_alt = 0;
 
-	ko = kopen(argv[optind + 2], &fd);
+    // initiate read loader
+	ko = kopen(argv[optind], &fd);
 	if (ko == 0) {
-		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
+		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind]);
 		return 1;
 	}
 	fp = gzdopen(fd, "r");
 	aux.ks = kseq_init(fp);
-	if (optind + 3 < argc) {
+    ++optind;
+
+    // initiate read2 loader (if given)
+	if (optind < argc) {
 		if (opt->flag&MEM_F_PE) {
 			if (bwa_verbose >= 2)
 				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
 		} else {
-			ko2 = kopen(argv[optind + 3], &fd2);
+			ko2 = kopen(argv[optind], &fd2);
 			if (ko2 == 0) {
-				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 3]);
+				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind]);
 				return 1;
 			}
 			fp2 = gzdopen(fd2, "r");
@@ -330,14 +341,19 @@ int main_mem(int argc, char *argv[])
 			opt->flag |= MEM_F_PE;
 		}
 	}
-	bwa_print_sam_hdr(aux.idx->bns, hdr_line);
-	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
+
+	//bwa_print_sam_hdr(aux.idx->bns, hdr_line); 
+
+    // storage loading batch size
+	//aux.actual_loading_batch_size = fixed_loading_batch_size > 0? fixed_loading_batch_size : opt->loading_batch_size * opt->n_threads;
+	aux.loading_batch_size = g3_opt->batch_size * g3_opt->num_use_gpus * loading_factor;
+    fprintf(stderr, "* storage loading factor %d\n", loading_factor);
+    fprintf(stderr, "* storage loading batch size %ld\n", aux.loading_batch_size);
+
 	// kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
-	setlocale(LC_NUMERIC, "");
+	// setlocale(LC_NUMERIC, "");
 	// kt_pipeline(1, process, &aux, 3);
 
-	FMI_wrapper *obj = FMI_wrapper_create(argv[optind]);
-    FMI_wrapper_load_index(obj, &(aux.loadedIndex));
 
     struct timespec start, end;
     double walltime;

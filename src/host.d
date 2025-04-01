@@ -65,6 +65,7 @@ src/host.o : src/host.cu \
     src/streams.cuh \
     src/batch_config.h \
     src/macro.h \
+    src/timer.h \
     src/offloader.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
@@ -198,5 +199,7 @@ src/streams.cuh:
 src/batch_config.h:
 
 src/macro.h:
+
+src/timer.h:
 
 src/offloader.h:

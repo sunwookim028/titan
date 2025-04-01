@@ -3,6 +3,27 @@
 
 #include "batch_config.h"
 
+// Runtime profiling macros
+#define S_SMEM 0
+#define S_R2    1
+#define S_R3    2
+#define C_SAL   3
+#define C_SORT_SEEDS    4
+#define C_CHAIN     5
+#define C_SORT_CHAINS   6
+#define C_FILTER    7
+#define E_PAIRGEN   8
+#define E_EXTEND    9
+#define E_FILTER_MARK   10
+#define E_SORT_ALNS 11
+#define E_T_PAIRGEN 12
+#define E_TRACEBACK 13
+#define E_FINALIZE  14
+
+#define ALIGN_TOTAL 15
+
+
+
 //
 // Compile options
 //

@@ -27,6 +27,7 @@
 Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@intel.com>;
 *****************************************************************************************/
 
+#include <iostream>
 #include <stdio.h>
 #include <cstdio>
 #include "sais.h"
@@ -68,8 +69,10 @@ FMI_search::~FMI_search()
         _mm_free(cp_occ2);
     if(one_hot_mask_array)
         _mm_free(one_hot_mask_array);
+    /* FIXME segfault. handle later..
     if(packed_bwt)
         free(packed_bwt);
+        */
 }
 
 int64_t FMI_search::pac_seq_len(const char *fn_pac)
@@ -896,8 +899,7 @@ void FMI_search::load_index()
             ref_file_name);
     bwa_idx_load_ele(ref_file_name, BWA_IDX_ALL);
     */
-
-    fprintf(stderr, "* Done reading Index!!\n");
+    //fprintf(stderr, "* Done reading Index!!\n");
 }
 
 void FMI_search::getSMEMsOnePosOneThread(uint8_t *enc_qdb,

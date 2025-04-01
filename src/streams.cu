@@ -12,11 +12,10 @@ static void transferIndex(
 	const bntseq_t *bns, 
 	const uint8_t *pac,
 	const kmers_bucket_t *kmerHashTab,
-	process_data_t *process_instance)
+	process_data_t *process_instance,
+    unsigned long long *allocated_size)
 {
 		/* CUDA GLOBAL MEMORY ALLOCATION AND TRANSFER */
-	unsigned long long total_size = bwt->bwt_size*sizeof(uint32_t) + bwt->n_sa*sizeof(bwtint_t) + bns->n_seqs*sizeof(bntann1_t) + bns->n_holes*sizeof(bntamb1_t) + bns->l_pac*sizeof(uint8_t);
-	fprintf(stderr, "[M::%-25s] Device memory for Index ...... %.2f MB \n", __func__, (float)total_size/MB_SIZE);
 
 	// Burrows-Wheeler Transform
 		// 1. bwt_t structure
@@ -37,6 +36,15 @@ static void transferIndex(
 		// set pointers on device's memory to bwt_int and SA
 	cudaMemcpy((void**)&(d_bwt->bwt), &d_bwt_int, sizeof(uint32_t*), cudaMemcpyHostToDevice);
 	cudaMemcpy((void**)&(d_bwt->sa), &d_bwt_sa, sizeof(bwtint_t*), cudaMemcpyHostToDevice);
+
+
+	unsigned long long total_size = sizeof(bwt_t) +\
+                                    bwt->bwt_size*sizeof(uint32_t) +\
+                                    bwt->n_sa*sizeof(bwtint_t) +\
+                                    bns->n_seqs*sizeof(bntann1_t) +\
+                                    bns->n_holes*sizeof(bntamb1_t) +\
+                                    bns->l_pac*sizeof(uint8_t);
+	fprintf(stderr, "[M::%-25s] Device memory for Index ...... %.2f MB \n", __func__, (float)total_size/MB_SIZE);
 
 	// BNS
 	// First create h_bns as a copy of bns on host
@@ -109,7 +117,8 @@ static void transferIndex(
 static void transferOptions(
 	const mem_opt_t *opt, 
 	mem_pestat_t *pes0,
-	process_data_t *process_instance)
+	process_data_t *process_instance,
+    unsigned long long *allocated_size)
 {
 	// matching and mapping options (opt)
 	mem_opt_t* d_opt;
@@ -151,7 +160,7 @@ inline int allocateAuxIntervals(process_data_t *process_instance, g3_opt_t *g3_o
 /* allocate memory for intermediate data on GPU
 	send pointer to process_instance
  */
-void allocateIntermediateData(process_data_t *process_instance, g3_opt_t *g3_opt){
+void allocateIntermediateData(process_data_t *process_instance, g3_opt_t *g3_opt, unsigned long long *allocated_size){
     auto old_value = bwa_verbose;
     bwa_verbose = 3;
 	unsigned long long total_size = (g3_opt->batch_size) *sizeof(smem_aux_t) + (g3_opt->batch_size) *sizeof(mem_seed_v) + (g3_opt->batch_size) *sizeof(mem_chain_v) + (g3_opt->batch_size) *500*sizeof(seed_record_t) + (g3_opt->batch_size) *sizeof(mem_alnreg_v) + (g3_opt->batch_size) *sizeof(mem_aln_v) + 4*5*(g3_opt->batch_size) *sizeof(int);
@@ -190,8 +199,8 @@ void allocateIntermediateData(process_data_t *process_instance, g3_opt_t *g3_opt
 /* transfer index data */
 static void transferFmIndex(
         process_data_t *process_instance,
-        const fmIndex *idx
-        )
+        const fmIndex *idx,
+    unsigned long long *allocated_size)
 {
     /**
      * Reference data to transfer:
@@ -288,19 +297,21 @@ void newProcess(
     process_data_t *instance = (process_data_t*)calloc(1, sizeof(process_data_t));
     instance->gpu_no = gpuid;
 
+    unsigned long long allocated_size;
+
 	// user-defined options
-	transferOptions(opt, pes0, instance);
+	transferOptions(opt, pes0, instance, &allocated_size);
     
 	// transfer index data
-	transferIndex(bwt, bns, pac, kmerHashTab, instance);
+	transferIndex(bwt, bns, pac, kmerHashTab, instance, &allocated_size);
 
-    transferFmIndex(instance, hostFmIndex);
+    transferFmIndex(instance, hostFmIndex, &allocated_size);
 
 	// init memory management
 	instance->d_buffer_pools = CUDA_BufferInit(g3_opt->batch_size);
 
 	// initialize intermediate processing memory on device
-	allocateIntermediateData(instance, g3_opt);
+	allocateIntermediateData(instance, g3_opt, &allocated_size);
 
 	// initialize pinned memory for reads on host
 	gpuErrchk( cudaMallocHost((void**)&instance->h_seqs, (g3_opt->batch_size)*sizeof(bseq1_t)) );

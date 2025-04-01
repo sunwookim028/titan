@@ -65,7 +65,8 @@ src/offloader.o : src/offloader.cu \
     src/bwamem_GPU.cuh \
     src/streams.cuh \
     src/batch_config.h \
-    src/macro.h
+    src/macro.h \
+    src/timer.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -200,3 +201,5 @@ src/streams.cuh:
 src/batch_config.h:
 
 src/macro.h:
+
+src/timer.h:

@@ -1,4 +1,5 @@
 #include "host.h"
+#include "timer.h"
 #include "batch_config.h"
 #include "offloader.h"
 #include "streams.cuh"
@@ -8,9 +9,13 @@
 #include <string.h>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <climits>
+#include <cfloat>
 #include <thread>
 using namespace std;
+
+float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
 
 /**
  * @brief initiate memory for a super batch
@@ -81,19 +86,22 @@ static void sortReads(bseq1_t *reads, int n_reads)
  *
  * @param ks
  * @param ks2
- * @param actual_chunk_size
+ * @param chunk_size
  * @param copy_comment
  * @param transfer_data
  * @return int number of reads loaded from file
  */
-static unsigned long long dataloader(kseq_t *ks, kseq_t *ks2, unsigned long long actual_chunk_size, int copy_comment, superbatch_data_t *transfer_data, g3_opt_t *g3_opt)
+static unsigned long long dataloader(kseq_t *ks, kseq_t *ks2, unsigned long long loading_batch_size, int copy_comment, superbatch_data_t *transfer_data, g3_opt_t *g3_opt,
+        double *func_elapsed_ms)
 {
+    FUNC_TIMER_START;
     int64_t size = 0;
     unsigned long long n_seqs_read;
-    bseq_read2(actual_chunk_size, &n_seqs_read, ks, ks2, transfer_data, g3_opt); // this will write to transfer_data
+    bseq_read2(loading_batch_size, &n_seqs_read, ks, ks2, transfer_data, g3_opt); // this will write to transfer_data
     bseq1_t *reads = transfer_data->reads;
     transfer_data->n_reads = n_seqs_read;
     if(n_seqs_read == 0){
+        FUNC_TIMER_END;
         return 0;
     }
     if(copy_comment)
@@ -103,6 +111,7 @@ static unsigned long long dataloader(kseq_t *ks, kseq_t *ks2, unsigned long long
         }
 
     // sortReads(reads, n_seqs_read);
+    FUNC_TIMER_END;
     return n_seqs_read;
 }
 
@@ -113,14 +122,20 @@ static unsigned long long dataloader(kseq_t *ks, kseq_t *ks2, unsigned long long
  */
 void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
 {
+    struct timespec start, end;
+    double walltime_initialize, walltime_process, walltime_cleanup;
+    clock_gettime(CLOCK_REALTIME,  &start);
+
     int num_gpus;
     int num_use_gpus = g3_opt->num_use_gpus;
     cudaGetDeviceCount(&num_gpus);
-    std::cerr << "PROCESSING WITH " << num_use_gpus << " GPUS, OUT OF "\
-        << num_gpus << " GPUS." << std::endl;
     if(num_gpus < num_use_gpus){
-        std::cerr << "INVALID REQUEST" << std::endl;
+        std::cerr << "!! invalid request of " << num_use_gpus << " GPUs"
+            << "where only " << num_gpus << " GPUs are available." << std::endl;
         exit(1);
+    } else{
+        std::cerr << "* using " << num_use_gpus << " GPUs out of " << num_gpus
+            << " available GPUs." << std::endl;
     }
 
     // Double buffers to overlap processing and loading the next input batch.
@@ -142,15 +157,13 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
         tran[j]->fd_outfile = aux->fd_outfile;
     }
 
-    struct timespec start, end;
-    double walltime;
+    clock_gettime(CLOCK_REALTIME,  &end);
+    walltime_initialize = (end.tv_sec - start.tv_sec) +\
+                           (end.tv_nsec - start.tv_nsec) / 1e9;
 
-    //dataloader(aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loaded, g3_opt);
-
-    long int num_total_reads = 0;
     clock_gettime(CLOCK_REALTIME,  &start);
-
-    //offloader(loaded, proc, tran, g3_opt);//, superbatch_results[iter]);
+    long int num_total_reads = 0;
+    memset(tprof, 0, sizeof(float) * MAX_NUM_GPUS * MAX_NUM_STEPS);
 
 
     // Load the next (global) input batch from the host storage
@@ -161,32 +174,107 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
 #define B 1
 #define toggle(ab) (1 - (ab))
     int AB = A;
+    double load_elapsed_ms;
+    double align_elapsed_ms;
     do { // TODO we want dataloader to be multi-threaded as well.
-        std::thread t_dataloader(dataloader, aux->ks, aux->ks2, INT_MAX, aux->copy_comment, loading, g3_opt);
-        std::thread t_offloader(offloader, loaded, proc, tran, g3_opt);//, superbatch_results[AB]);
+        std::thread t_dataloader(dataloader, aux->ks, aux->ks2, 
+                aux->loading_batch_size, aux->copy_comment, loading, g3_opt,
+                &load_elapsed_ms);
+        std::thread t_offloader(offloader, loaded, proc, tran, g3_opt,
+                &align_elapsed_ms);//, superbatch_results[AB]);
         //std::thread t_storer(storer, aux->fd_outfile, superbatch_results[toggle(AB)]); // possibly merge pulled results
 
         t_offloader.join();
         t_dataloader.join();
+
+        fprintf(stderr, "* loaded %ld reads from storage in %.2f ms\n",
+                loading->n_reads, load_elapsed_ms);
+        fprintf(stderr, "* aligned %ld reads with %d GPUs in %.2f ms\n",
+                loaded->n_reads, g3_opt->num_use_gpus, align_elapsed_ms);
 
         superbatch_data_t * tmp = loaded;
         loaded = loading;
         loading = tmp;
         resetSuperBatchData(loading);
         AB = toggle(AB);
-        fprintf(stderr, "main_gcube: loaded->n_reads %d\n", loaded->n_reads);
         num_total_reads += loaded->n_reads;
     } while (loaded->n_reads != 0);
 
     clock_gettime(CLOCK_REALTIME,  &end);
-    walltime = (end.tv_sec - start.tv_sec) +\
+    walltime_process = (end.tv_sec - start.tv_sec) +\
                            (end.tv_nsec - start.tv_nsec) / 1e9;
-    fprintf(stderr,"\n\nWall-clock time for processing all %ld reads: %.6lf seconds\n\n\n", num_total_reads, walltime);
+
 
 
     // Destroy all generated per-GPU structures.
     for(int j=0; j<num_use_gpus; j++){
         cudaStreamDestroy(*(cudaStream_t*)proc[j]->CUDA_stream);
         cudaStreamDestroy(*(cudaStream_t*)tran[j]->CUDA_stream);
+    }
+
+
+    fprintf(stderr,"* Wall-clock time mem alloc & transfer: %.2lf seconds\n", walltime_initialize);
+    fprintf(stderr,"* Wall-clock time for processing all %ld reads: %.2lf seconds\n", num_total_reads, walltime_process);
+
+
+    std::cerr << std::endl << "* Wall-clock time for alignment across "
+        << g3_opt->num_use_gpus << " GPUs for each stage (avg, min, max):"
+        << std::endl;
+
+    // Runtime profiling stats
+    //  0: min, 1: avg, 2: max.
+    float walltime_seeding[3], walltime_chaining[3], walltime_extending[3];
+    //  0: seeding, 1: chaining, 2: extending.
+    float tim, min_tim[3], max_tim[3], sum_tim[3];
+    for(int k=0; k<3; k++){
+        min_tim[k] = FLT_MAX; max_tim[k] = FLT_MIN; sum_tim[k] = 0;
+    }
+    float *tims;
+    for(int gpuid = 0; gpuid < g3_opt->num_use_gpus; gpuid++){
+        tims = tprof[gpuid];
+
+        tim = tims[S_SMEM] + tims[S_R2] + tims[S_R3];
+        if(tim < min_tim[0]) min_tim[0] = tim;
+        if(tim > max_tim[0]) max_tim[0] = tim;
+        sum_tim[0] += tim;
+
+        tim = tims[C_SAL] + tims[C_SORT_SEEDS] + tims[C_CHAIN]
+            + tims[C_SORT_CHAINS] + tims[C_FILTER];
+        if(tim < min_tim[1]) min_tim[1] = tim;
+        if(tim > max_tim[1]) max_tim[1] = tim;
+        sum_tim[1] += tim;
+
+        tim = tims[E_PAIRGEN] + tims[E_EXTEND] + tims[E_FILTER_MARK]
+            + tims[E_SORT_ALNS] + tims[E_T_PAIRGEN] + tims[E_TRACEBACK]
+            + tims[E_FINALIZE];
+        if(tim < min_tim[2]) min_tim[2] = tim;
+        if(tim > max_tim[2]) max_tim[2] = tim;
+        sum_tim[2] += tim;
+    }
+    std::cerr << "\t\t\t\t\t- seeding: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[0] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[0] / 1000 << ", "
+        << max_tim[0] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "\t\t\t\t\t- chaining: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[1] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[1] / 1000 << ", "
+        << max_tim[1] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "\t\t\t\t\t- extending: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[2] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[2] / 1000 << ", "
+        << max_tim[2] / 1000 << ") seconds" << std::endl;
+
+
+    for(int gpuid = 0; gpuid < g3_opt->num_use_gpus; gpuid++){
+        std::cerr << std::endl
+            << "* Wall-clock time, GPU #" << gpuid
+            << " total alignment Sum: ";
+        std::cerr << std::fixed << std::setprecision(2) 
+            << tprof[gpuid][ALIGN_TOTAL] / 1000 << " seconds" << std::endl;
     }
 }
