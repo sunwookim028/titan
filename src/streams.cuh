@@ -44,10 +44,10 @@ extern "C"{
         );
 
 
-    /* swap reads on the process set and the transfer set
-        h_seqs <-> h_seqs (including name, comments, seq, qual)
-        d_seqs <-> d_seqs (including name, comments, seq, qual)
-    */
+    /* Swap data.
+       * proc->tran: batch size & batch offset & alignment results.
+       * tran->proc: batch size & batch offset & new read sequences.
+       */
     void swapData(process_data_t *process_data, transfer_data_t *transfer_data);
 
 	/* reset a process' data to prepare aligning a new batch

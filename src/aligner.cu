@@ -1,11 +1,8 @@
-#include "offloader.h"
-#include "host.h"
 #include "timer.h"
 #include "macro.h"
 #include "bwa.h"
 #include <locale.h>
 #include "bwamem_GPU.cuh"
-#include "batch_config.h"
 #include "streams.cuh"
 #include <future>
 #include <iostream>
@@ -90,6 +87,7 @@ static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
 
     push_m->lock();
     push_offset = *push_counter;
+    tran->batch_offset = loaded_input->loading_batch_offset + push_offset;
 
     if(push_offset >= loaded_input->n_reads){
         push_count = 0;
@@ -108,12 +106,6 @@ static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
     *push_counter += push_count;
     push_m->unlock();
 
-#ifdef VERBOSE
-    if(push_count > 0){
-        std::cerr << "Pushing input no. " << push_offset << " ~ no. "
-            << push_offset + push_count - 1 << std::endl;
-    }
-#endif
 
     if(push_count == 0){
         tran->n_seqs = 0;
@@ -147,53 +139,56 @@ static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
  * @param transfer_data 
  */
 
-static void pull(transfer_data_t *tran, int *pull_counter, std::mutex *pull_m,
-        int *actual_pull_count,
-        double *func_elapsed_ms)
+static void pull(transfer_data_t *tran, double *func_elapsed_ms)
 {
     FUNC_TIMER_START;
-    int k = 0;
-    int pull_offset;
-    int pull_count = tran->n_seqs;
-
-    if (pull_count==0){
-        *actual_pull_count = 0;
+    if (tran->n_seqs==0){
         FUNC_TIMER_END;
         return;
     }
 
-    pull_m->lock();
-    pull_offset = *pull_counter;
-    *pull_counter += pull_count;
-    pull_m->unlock();
+    // Pull alignment results of the previous batch.
+    int total_alns_num;
+    cudaMemcpy(&total_alns_num, tran->d_total_alns_num, sizeof(int),
+            cudaMemcpyDeviceToHost);
 
-#ifdef VERBOSE
-    std::cerr << "Pulling input no. " << pull_offset << " ~ no. "
-        << pull_offset + pull_count - 1 << std::endl;
-#endif
+    int *alnID_offset = (int*)malloc(sizeof(int) * total_alns_num);
+    int *alnID_num = (int*)malloc(sizeof(int) * total_alns_num);
+    cudaMemcpy(alnID_offset, tran->d_alns_offset, sizeof(int) * total_alns_num,
+            cudaMemcpyDeviceToHost);
+    cudaMemcpy(alnID_num, tran->d_alns_num, sizeof(int) * total_alns_num,
+            cudaMemcpyDeviceToHost);
 
-	//CUDATransferSamOut(tran); // FIXME
 
-	// write from host's seq_io to output
-#define BUFLEN 1024
-	//bseq1_t *seqs = tran->h_seqs;
-	for (int i = 0; i < pull_count; ++i){ // aggregate from memory then write to file
-		//if (seqs[i].sam){
-            //err_fputs(seqs[i].sam, stdout); // FIXME
-            //pwrite(tran->fd_outfile, "Hello!", BUFLEN, pull_offset * BUFLEN);
-            //write(tran->fd_outfile, "spider-man", 10);
-        //} 
-    }
+    int *rid = (int*)malloc(sizeof(int) * total_alns_num);
+    int64_t *pos = (int64_t*)malloc(sizeof(int64_t) * total_alns_num);
 
-    *actual_pull_count = pull_count;
+    int total_cigar_len;
+    cudaMemcpy(&total_cigar_len, tran->d_total_cigar_len, sizeof(int),
+            cudaMemcpyDeviceToHost);
+    int *cigar = (int*)malloc(sizeof(int) * total_cigar_len);
+    cudaMemcpy(cigar, tran->d_alns_cigar, sizeof(int) * total_cigar_len,
+            cudaMemcpyDeviceToHost);
+
+    int *cigar_len = (int*)malloc(sizeof(int) * total_alns_num);
+    cudaMemcpy(cigar_len, tran->d_alns_cigar_len, sizeof(int) * total_alns_num,
+            cudaMemcpyDeviceToHost);
+    uint32_t *cigar_offset = (uint32_t*)malloc(sizeof(uint32_t) * total_alns_num);
+    cudaMemcpy(cigar_offset, tran->d_alns_cigar_offset, sizeof(uint32_t) * total_alns_num,
+            cudaMemcpyDeviceToHost);
+
+
+    // TODO Generate SAM strings.
+
     FUNC_TIMER_END;
     return;
+
+    // TODO Sequentially write to the output file. -> delegate it to the host.cu level.
 }
 
-static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
-        process_data_t *batch_A, transfer_data_t *batch_B,\
-        int *pull_counter, int *push_counter,\
-        std::mutex *pull_m, std::mutex *push_m, g3_opt_t *g3_opt)
+static void offloader(int gpuid, superbatch_data_t *loadedinput,
+        process_data_t *batch_A, transfer_data_t *batch_B,
+        int *push_counter, std::mutex *push_m, g3_opt_t *g3_opt)
 {
     int this_gpuid;
     if(cudaSetDevice(gpuid) != cudaSuccess){
@@ -208,27 +203,29 @@ static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
         return;
     } 
 
-    double align_ms, pull_ms, push_ms;
-    int pull_count, push_count, to_pull_count;
+    double compute_ms, pull_ms, push_ms;
+    int push_count, pull_count;
     while(true){
-        std::thread t_align(bwa_align, gpuid, batch_A, g3_opt, &align_ms);
-        to_pull_count = batch_B->n_seqs;
-        pull(batch_B, pull_counter, pull_m, &pull_count, &pull_ms);
+        std::thread t_compute(bwa_align, gpuid, batch_A, g3_opt, &compute_ms);
+        pull_count = batch_B->n_seqs;
+        pull(batch_B, &pull_ms);
         push(batch_B, loadedinput, push_counter, push_m, g3_opt, 
                 &push_count, &push_ms);
-        t_align.join();
+        t_compute.join();
+        tprof[gpuid][COMPUTE_TOTAL] += (float)compute_ms;
+        tprof[gpuid][PULL_TOTAL] += (float)pull_ms;
+        tprof[gpuid][PUSH_TOTAL] += (float)push_ms;
 
         std::cerr << "* GPU #" << gpuid << " | ";
         std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
-            << align_ms;
-        std::cerr << "ms | aligned " << batch_A->n_seqs << " reads" << std::endl;
-        tprof[gpuid][ALIGN_TOTAL] += (float)align_ms;
+            << compute_ms;
+        std::cerr << "ms | GPU-computed " << batch_A->n_seqs << " reads" << std::endl;
 
         std::cerr << "* GPU #" << gpuid << " | ";
         std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
             << pull_ms;
-        std::cerr << "ms | pulled " << pull_count << " / " << to_pull_count
-            << " reads (prev. batch)" << std::endl;
+        std::cerr << "ms | pulled " << pull_count << " reads (prev. batch)"
+            << std::endl;
 
         std::cerr << "* GPU #" << gpuid << " | ";
         std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
@@ -238,13 +235,13 @@ static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
 
         swapData(batch_A, batch_B);
         if(batch_A->n_seqs == 0){
-            to_pull_count = batch_B->n_seqs;
-            pull(batch_B, pull_counter, pull_m, &pull_count, &pull_ms);
+            pull(batch_B, &pull_ms);
+            tprof[gpuid][PULL_TOTAL] += (float)pull_ms;
 
             std::cerr << "* GPU #" << gpuid << " | ";
             std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
                 << pull_ms;
-            std::cerr << "ms | pulled " << pull_count << " / " << to_pull_count
+            std::cerr << "ms | pulled " << pull_count
                 << " reads (prev. FINAL batch)" << std::endl;
             break;
         }
@@ -254,7 +251,7 @@ static void deviceoffloader(int gpuid, superbatch_data_t *loadedinput,\
 	return;
 }
 
-void offloader(superbatch_data_t *loadedinput, process_data_t *proc[MAX_NUM_GPUS],
+void aligner(superbatch_data_t *loadedinput, process_data_t *proc[MAX_NUM_GPUS],
         transfer_data_t *tran[MAX_NUM_GPUS], g3_opt_t *g3_opt,
         double *func_elapsed_ms)
 {
@@ -265,19 +262,18 @@ void offloader(superbatch_data_t *loadedinput, process_data_t *proc[MAX_NUM_GPUS
         FUNC_TIMER_END;
         return;
     }
-    std::thread perGPU[MAX_NUM_GPUS];
-    int pull_counter = 0;
+    std::thread t_offloader[MAX_NUM_GPUS];
     int push_counter = 0;
-    std::mutex push_m, pull_m;
+    std::mutex push_m;
 
-    int num_use_gpus = g3_opt->num_use_gpus;
 
-    for(int j=0; j<num_use_gpus; j++){
-        perGPU[j] = std::thread(deviceoffloader, j, loadedinput, proc[j], tran[j],\
-                &pull_counter, &push_counter, &pull_m, &push_m, g3_opt);
+    int gpuid;
+    for(gpuid = 0; gpuid < g3_opt->num_use_gpus; gpuid++){
+        t_offloader[gpuid] = std::thread(offloader, gpuid, loadedinput,
+                proc[gpuid], tran[gpuid], &push_counter, &push_m, g3_opt);
     }
-    for(int j=0; j<num_use_gpus; j++){
-        perGPU[j].join();
+    for(gpuid = 0; gpuid < g3_opt->num_use_gpus; gpuid++){
+        t_offloader[gpuid].join();
     }
 
     FUNC_TIMER_END;

@@ -1,4 +1,4 @@
-src/offloader.o : src/offloader.cu \
+src/streams.o : src/streams.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/host_config.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/builtin_types.h \
@@ -50,23 +50,17 @@ src/offloader.o : src/offloader.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    src/offloader.h \
-    src/host.h \
     src/bwa.h \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
     src/bwt.h \
     src/hashKMerIndex.h \
-    src/bwamem.h \
-    src/kvec.h \
-    src/utils.h \
-    src/kseq.h \
-    src/bwamem_GPU.cuh \
     src/streams.cuh \
-    src/batch_config.h \
-    src/macro.h \
-    src/timer.h
+    src/bwamem.h \
+    src/errHandler.cuh \
+    src/CUDAKernel_memmgnt.cuh \
+    src/macro.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -170,10 +164,6 @@ src/offloader.o : src/offloader.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-src/offloader.h:
-
-src/host.h:
-
 src/bwa.h:
 
 src/bntseq.h:
@@ -186,20 +176,12 @@ src/bwt.h:
 
 src/hashKMerIndex.h:
 
-src/bwamem.h:
-
-src/kvec.h:
-
-src/utils.h:
-
-src/kseq.h:
-
-src/bwamem_GPU.cuh:
-
 src/streams.cuh:
 
-src/batch_config.h:
+src/bwamem.h:
+
+src/errHandler.cuh:
+
+src/CUDAKernel_memmgnt.cuh:
 
 src/macro.h:
-
-src/timer.h:

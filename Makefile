@@ -40,9 +40,17 @@ CPP_OBJECTS_TARGET1 = src/buildIndex.o \
 		      src/hashKMer.o \
 		      src/loadKMerIndex.o
 CPP_OBJECTS_TARGET2 = src/loadKMerIndex.o \
+		      src/fastmap.o \
+		      src/main.o \
 		      src/FMI_wrapper.o \
 		      src/FMI_search.o
 C_OBJECTS = $(C_SOURCES:.c=.o)
+
+C_OBJECTS_TARGET2 = src/bntseq.o \
+		    src/malloc_wrap.o \
+		    src/utils.o \
+		    src/bwt.o \
+
 
 CU_DEBUG_OBJECTS = $(CU_SOURCES:.cu=.debug.o)
 CU_OBJECTS = $(CU_SOURCES:.cu=.o)
@@ -78,7 +86,7 @@ all: depend $(TARGET1) $(TARGET2)
 $(TARGET1): $(CPP_OBJECTS_TARGET1) $(LIB_FRONTEND) -lz
 	$(CXX) $(LINKFLAGS) -o $@ $^
 
-$(TARGET2): $(CU_OBJECTS_LINKER) $(CU_OBJECTS) $(CPP_OBJECTS_TARGET2) $(LIB_FRONTEND) 
+$(TARGET2): $(CU_OBJECTS_LINKER) $(CU_OBJECTS) $(CPP_OBJECTS_TARGET2) $(C_OBJECTS_TARGET2)
 	$(CXX) $(LINKFLAGS) -L. -o $@ $^ $(LIBS) 
 
 $(TARGET2_DEBUG): $(CU_DEBUG_OBJECTS_LINKER) $(CU_DEBUG_OBJECTS) $(CPP_OBJECTS_TARGET2) $(LIB_FRONTEND) 

@@ -1,7 +1,6 @@
 #include "bwa.h"
 #include "macro.h"
 #include "CUDAKernel_memmgnt.cuh"
-#include "batch_config.h"
 
 #include "fmindex.cuh"
 //#include "bntseq_CUDA.cuh"

@@ -173,8 +173,6 @@ __global__ void printAln(bntseq_t *d_bns, mem_aln_v *d_alnvecs, int readID, int 
     if(blockIdx.x != 0 || threadIdx.x != 0) {
         return;
     }
-#define BAM2LEN(bam)    ((int)(bam>>4))
-#define BAM2OP(bam)     ((char)("MIDSH"[(int)bam&0xf])) 
     for(mem_aln_t *aln = d_alnvecs[readID].a;\
             aln < d_alnvecs[readID].a + d_alnvecs[readID].n; aln++) {
         printf("%s %d %s %ld ", phasename[type], readID+1, d_bns->anns[aln->rid].name, aln->pos+1); //1-based rpos

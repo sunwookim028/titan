@@ -1,7 +1,8 @@
-#ifndef SEED_CONSTANTS_
-#define SEED_CONSTANTS_
+#ifndef _MACRO_H
+#define _MACRO_H
 
-#include "batch_config.h"
+#define MAX_NUM_GPUS 8
+#define MAX_NUM_STEPS 24
 
 // Runtime profiling macros
 #define S_SMEM 0
@@ -20,8 +21,40 @@
 #define E_TRACEBACK 13
 #define E_FINALIZE  14
 
-#define ALIGN_TOTAL 15
+#define COMPUTE_TOTAL 15
+#define PULL_TOTAL 16
+#define PUSH_TOTAL 17
 
+#define GPU_SETUP 18
+#define FILE_INPUT 19
+#define FILE_OUTPUT 20
+
+// Decoding CIGAR from bam encoding.
+#define BAM2LEN(bam)    ((int)(bam>>4))
+#define BAM2OP(bam)     ((char)("MIDSH"[(int)bam&0xf])) 
+
+// constants
+#define WARPSIZE 32
+
+#define SB_MAX_COUNT 1000000                   // max number of reads
+
+#define NBUFFERPOOLS 32 	// number of buffer pools
+
+
+// Constant values
+#define MAX_LEN_READ 320 // max. length of input short read
+#define SEQ_MAXLEN MAX_LEN_READ// max length of a seq we want to process
+#define AVG_NUM_SEEDS 8
+
+
+
+#define MAX_NUM_SW_SEEDS 500 // max. number of seed counts in all chains of a read, including dups.
+
+// super-batch config
+#define SB_NAME_LIMIT (unsigned long)SB_MAX_COUNT * 100       // chunk size of name
+#define SB_COMMENT_LIMIT (unsigned long)SB_MAX_COUNT * 100    // chunk size of comment
+#define SB_SEQ_LIMIT (unsigned long)SB_MAX_COUNT *SEQ_MAXLEN  // chunk size of seq
+#define SB_QUAL_LIMIT (unsigned long)SB_MAX_COUNT *SEQ_MAXLEN // chunk size of qual
 
 
 //
@@ -78,4 +111,5 @@
 #define PLEN(seed) ((uint32_t)(seed->info) - (uint32_t)((seed->info)>>32))
 #define PN(seed) ((uint32_t)(seed->info) - 1)
 #define PM(seed) ((uint32_t)(seed->info >> 32))
-#endif // end of #ifndef SEED_CONSTANTS_
+
+#endif 

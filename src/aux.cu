@@ -11,7 +11,7 @@
 #include "kstring_CUDA.cuh"
 #include <string.h>
 #include "streams.cuh"
-#include "batch_config.h"
+#include "macro.h"
 #include "hashKMerIndex.h"
 #include "seed.cuh"
 #include "preprocessing.cuh"

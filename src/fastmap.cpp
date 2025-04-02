@@ -33,15 +33,80 @@
 #include <limits.h>
 #include <ctype.h>
 #include <math.h>
-#include "host.h"
+#include "macro.h"
 #include "FMI_wrapper.h"
 #include <time.h>
+#include "kopen.h"
+#include "fastmap.h"
 
+#include "kseq_wrapper.h"
+
+
+float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
 extern unsigned char nst_nt4_table[256];
+	
+extern void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt);
 
-void *kopen(const char *fn, int *_fd);
-int kclose(void *a);
-void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
+g3_opt_t *g3_opt_init()
+{
+    g3_opt_t *o;
+    o = (g3_opt_t*)calloc(1, sizeof(g3_opt_t));
+    o->num_use_gpus = 1;
+    o->baseline = 0;
+    o->verbosity = 0;
+    o->print_mask = 0;
+    o->batch_size = 80000;
+    return o;
+}
+
+mem_opt_t *mem_opt_init()
+{
+	mem_opt_t *o;
+	o = (mem_opt_t*)calloc(1, sizeof(mem_opt_t));
+	o->flag = 0;
+	o->a = 1; o->b = 4;
+	o->o_del = o->o_ins = 6;
+	o->e_del = o->e_ins = 1;
+	o->w = 100;
+	o->T = 30;
+	o->zdrop = 100;
+	o->pen_unpaired = 17;
+	o->pen_clip5 = o->pen_clip3 = 5;
+
+	o->max_mem_intv = 20;
+
+	o->min_seed_len = 19;
+	o->split_width = 10;
+	o->max_occ = 500;
+	o->max_chain_gap = 10000;
+	o->max_ins = 10000;
+	o->mask_level = 0.50;
+	o->drop_ratio = 0.50;
+	o->XA_drop_ratio = 0.80;
+	o->split_factor = 1.5;
+	o->chunk_size = 30000000;
+	o->n_threads = 1;
+	o->max_XA_hits = 5;
+	o->max_XA_hits_alt = 200;
+	o->max_matesw = 50;
+	o->mask_level_redun = 0.95;
+	o->min_chain_weight = 0;
+	o->max_chain_extend = 1<<30;
+	o->mapQ_coef_len = 50; o->mapQ_coef_fac = log(o->mapQ_coef_len);
+	bwa_fill_scmat(o->a, o->b, o->mat);
+	return o;
+}
+
+void bwa_fill_scmat(int a, int b, int8_t mat[25])
+{
+	int i, j, k;
+	for (i = k = 0; i < 4; ++i) {
+		for (j = 0; j < 4; ++j)
+			mat[k++] = i == j? a : -b;
+		mat[k++] = -1; // ambiguous base
+	}
+	for (j = 0; j < 5; ++j) mat[k++] = -1;
+}
 
 static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 {
@@ -58,6 +123,143 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 		if (!opt0->pen_unpaired) opt->pen_unpaired *= opt->a;
 	}
 }
+
+
+/*********************
+ * Full index reader *
+ *********************/
+
+char *bwa_idx_infer_prefix(const char *hint)
+{
+	char *prefix;
+	int l_hint;
+	FILE *fp;
+	l_hint = strlen(hint);
+	prefix = (char*)malloc(l_hint + 3 + 4 + 1);
+	strcpy(prefix, hint);
+    //fprintf(stderr, "prefix = %s\n", prefix);
+	strcpy(prefix + l_hint, ".64.bwt");
+	if ((fp = fopen(prefix, "rb")) != 0) {
+		fclose(fp);
+		prefix[l_hint + 3] = 0;
+		return prefix;
+	} else {
+		strcpy(prefix + l_hint, ".bwt");
+        //fprintf(stderr, "prefix2 %s\n", prefix);
+		if ((fp = fopen(prefix, "rb")) == 0) {
+			free(prefix);
+			return 0;
+		} else {
+			fclose(fp);
+			prefix[l_hint] = 0;
+			return prefix;
+		}
+	}
+}
+
+bwt_t *bwa_idx_load_bwt(const char *hint)
+{
+	char *tmp, *prefix;
+	bwt_t *bwt;
+	prefix = bwa_idx_infer_prefix(hint);
+	if (prefix == 0) {
+		fprintf(stderr, "[E::%s] fail to locate the index files\n", __func__);
+		return 0;
+	}
+	tmp = (char*)calloc(strlen(prefix) + 5, 1);
+	strcat(strcpy(tmp, prefix), ".bwt"); // FM-index
+	bwt = bwt_restore_bwt(tmp);
+	strcat(strcpy(tmp, prefix), ".sa");  // partial suffix array (SA)
+	bwt_restore_sa(tmp, bwt);
+	free(tmp); free(prefix);
+	return bwt;
+}
+
+bwaidx_t *bwa_idx_load_from_disk(const char *hint, int which)
+{
+	bwaidx_t *idx;
+	char *prefix;
+    //fprintf(stderr, "%s hint  = %s\n", __func__, hint);
+	prefix = bwa_idx_infer_prefix(hint);
+    //fprintf(stderr, "%s prefix = %s\n", __func__, prefix);
+	if (prefix == 0) {
+        fprintf(stderr, "hello.\n");
+        fprintf(stderr, "hint: %s\n", hint);
+
+		fprintf(stderr, "[E::%s] fail to locate the index files\n", __func__);
+		return 0;
+	}
+	idx = (bwaidx_t*)calloc(1, sizeof(bwaidx_t));
+	if (which & BWA_IDX_BWT) idx->bwt = bwa_idx_load_bwt(hint);
+	if (which & BWA_IDX_BNS) {
+		int i, c;
+		idx->bns = bns_restore(prefix);
+		for (i = c = 0; i < idx->bns->n_seqs; ++i)
+			if (idx->bns->anns[i].is_alt) ++c;
+			fprintf(stderr, "[M::%s] read %d ALT contigs\n", __func__, c);
+		if (which & BWA_IDX_PAC) {
+			idx->pac = (uint8_t*)calloc(idx->bns->l_pac/4+1, 1);
+            // FIXME error handling
+			fread(idx->pac, 1, idx->bns->l_pac/4+1, idx->bns->fp_pac); // concatenated 2-bit encoded sequence
+			fclose(idx->bns->fp_pac);
+			idx->bns->fp_pac = 0;
+		}
+	}
+	free(prefix);
+	return idx;
+}
+
+bwaidx_t *bwa_idx_load(const char *hint, int which)
+{
+	return bwa_idx_load_from_disk(hint, which);
+}
+
+void bwa_idx_destroy(bwaidx_t *idx)
+{
+	if (idx == 0) return;
+	if (idx->mem == 0) {
+		if (idx->bwt) bwt_destroy(idx->bwt);
+		if (idx->bns) bns_destroy(idx->bns);
+		if (idx->pac) free(idx->pac);
+	} else {
+		free(idx->bwt); free(idx->bns->anns); free(idx->bns);
+		if (!idx->is_shm) free(idx->mem);
+	}
+	free(idx);
+}
+
+
+static char *bwa_escape(char *s)
+{
+	char *p, *q;
+	for (p = q = s; *p; ++p) {
+		if (*p == '\\') {
+			++p;
+			if (*p == 't') *q++ = '\t';
+			else if (*p == 'n') *q++ = '\n';
+			else if (*p == 'r') *q++ = '\r';
+			else if (*p == '\\') *q++ = '\\';
+		} else *q++ = *p;
+	}
+	*q = '\0';
+	return s;
+}
+
+char *bwa_insert_header(const char *s, char *hdr)
+{
+	int len = 0;
+	if (s == 0 || s[0] != '@') return hdr;
+	if (hdr) {
+		len = strlen(hdr);
+		hdr = (char*)realloc(hdr, len + strlen(s) + 2);
+		hdr[len++] = '\n';
+		strcpy(hdr + len, s);
+	} else hdr = strdup(s);
+	bwa_escape(hdr + len);
+	return hdr;
+}
+
+
 
 int main_mem(int argc, char *argv[])
 {
@@ -163,7 +365,7 @@ int main_mem(int argc, char *argv[])
 			if (*p != 0 && ispunct(*p) && isdigit(p[1]))
 				opt->pen_clip3 = strtol(p+1, &p, 10);
 		} else if (c == 'R') {
-			if ((rg_line = bwa_set_rg(optarg)) == 0) return 1; // FIXME: memory leak
+			//if ((rg_line = bwa_set_rg(optarg)) == 0) return 1; // FIXME: memory leak
 		} else if (c == 'H') {
 			if (optarg[0] != '@') {
 				FILE *fp;
@@ -194,7 +396,6 @@ int main_mem(int argc, char *argv[])
 				pes[1].high = (int)(strtod(p+1, &p) + .499);
 			if (*p != 0 && ispunct(*p) && isdigit(p[1]))
 				pes[1].low  = (int)(strtod(p+1, &p) + .499);
-			if (bwa_verbose >= 3)
 				fprintf(stderr, "[M::%s] mean insert size: %.3f, stddev: %.3f, max: %d, min: %d\n",
 						__func__, pes[1].avg, pes[1].std, pes[1].high, pes[1].low);
 		}
@@ -245,7 +446,7 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "       -q            don't modify mapQ of supplementary alignments\n");
 		fprintf(stderr, "       -K INT        process INT input bases in each batch regardless of nThreads (for reproducibility) []\n");
 		fprintf(stderr, "\n");
-		fprintf(stderr, "       -v INT        verbosity level: 1=error, 2=warning, 3=message, 4+=debugging [%d]\n", bwa_verbose);
+		fprintf(stderr, "       -v INT        verbosity level: 1=error, 2=warning, 3=message, 4+=debugging []\n");
 		fprintf(stderr, "       -T INT        minimum score to output [%d]\n", opt->T);
 		fprintf(stderr, "       -h INT[,INT]  if there are <INT hits with score >80%% of the max score, output all in XA [%d,%d]\n", opt->max_XA_hits, opt->max_XA_hits_alt);
 		fprintf(stderr, "       -a            output all alignments for SE or unpaired PE\n");
@@ -296,11 +497,7 @@ int main_mem(int argc, char *argv[])
 	} else update_a(opt, &opt0);
 	bwa_fill_scmat(opt->a, opt->b, opt->mat);
 
-	aux.idx = bwa_idx_load_from_shm(argv[optind]);
-	if (aux.idx == 0) {
-		if ((aux.idx = bwa_idx_load(argv[optind], BWA_IDX_ALL)) == 0) return 1; // FIXME: memory leak
-	} else if (bwa_verbose >= 3)
-		fprintf(stderr, "[M::%s] load the bwa index from shared memory\n", __func__);
+    if ((aux.idx = bwa_idx_load(argv[optind], BWA_IDX_ALL)) == 0) return 1; // FIXME: memory leak
 
     // load occ2
 	FMI_wrapper *obj = FMI_wrapper_create(argv[optind]);
@@ -318,7 +515,7 @@ int main_mem(int argc, char *argv[])
     // initiate read loader
 	ko = kopen(argv[optind], &fd);
 	if (ko == 0) {
-		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind]);
+		 fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind]);
 		return 1;
 	}
 	fp = gzdopen(fd, "r");
@@ -328,12 +525,11 @@ int main_mem(int argc, char *argv[])
     // initiate read2 loader (if given)
 	if (optind < argc) {
 		if (opt->flag&MEM_F_PE) {
-			if (bwa_verbose >= 2)
 				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
 		} else {
 			ko2 = kopen(argv[optind], &fd2);
 			if (ko2 == 0) {
-				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind]);
+			 fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind]);
 				return 1;
 			}
 			fp2 = gzdopen(fd2, "r");
@@ -350,10 +546,6 @@ int main_mem(int argc, char *argv[])
     fprintf(stderr, "* storage loading factor %d\n", loading_factor);
     fprintf(stderr, "* storage loading batch size %ld\n", aux.loading_batch_size);
 
-	// kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
-	// setlocale(LC_NUMERIC, "");
-	// kt_pipeline(1, process, &aux, 3);
-
 
     struct timespec start, end;
     double walltime;
@@ -364,7 +556,7 @@ int main_mem(int argc, char *argv[])
 
     walltime = (end.tv_sec - start.tv_sec) +\
                            (end.tv_nsec - start.tv_nsec) / 1e9;
-    fprintf(stderr,"\n\nWall-clock time after index loading: %.6lf seconds\n\n\n", walltime);
+    fprintf(stderr,"* Wall-clock time after index loading: %.2lf seconds\n\n\n", walltime);
 
 	FMI_wrapper_destroy(obj);
 	free(hdr_line);
@@ -372,87 +564,10 @@ int main_mem(int argc, char *argv[])
     free(g3_opt);
 	bwa_idx_destroy(aux.idx);
 	kseq_destroy(aux.ks);
-	err_gzclose(fp); kclose(ko);
+	gzclose(fp); kclose(ko);
 	if (aux.ks2) {
 		kseq_destroy(aux.ks2);
-		err_gzclose(fp2); kclose(ko2);
+		gzclose(fp2); kclose(ko2);
 	}
-	return 0;
-}
-
-int main_fastmap(int argc, char *argv[])
-{
-	int c, i, min_iwidth = 20, min_len = 17, print_seq = 0, min_intv = 1, max_len = INT_MAX;
-	uint64_t max_intv = 0;
-	kseq_t *seq;
-	bwtint_t k;
-	gzFile fp;
-	smem_i *itr;
-	const bwtintv_v *a;
-	bwaidx_t *idx;
-
-	while ((c = getopt(argc, argv, "w:l:pi:I:L:")) >= 0) {
-		switch (c) {
-			case 'p': print_seq = 1; break;
-			case 'w': min_iwidth = atoi(optarg); break;
-			case 'l': min_len = atoi(optarg); break;
-			case 'i': min_intv = atoi(optarg); break;
-			case 'I': max_intv = atol(optarg); break;
-			case 'L': max_len  = atoi(optarg); break;
-		    default: return 1;
-		}
-	}
-	if (optind + 1 >= argc) {
-		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   bwa fastmap [options] <idxbase> <in.fq>\n\n");
-		fprintf(stderr, "Options: -l INT    min SMEM length to output [%d]\n", min_len);
-		fprintf(stderr, "         -w INT    max interval size to find coordiantes [%d]\n", min_iwidth);
-		fprintf(stderr, "         -i INT    min SMEM interval size [%d]\n", min_intv);
-		fprintf(stderr, "         -L INT    max MEM length [%d]\n", max_len);
-		fprintf(stderr, "         -I INT    stop if MEM is longer than -l with a size less than INT [%ld]\n", (long)max_intv);
-		fprintf(stderr, "\n");
-		return 1;
-	}
-
-	fp = xzopen(argv[optind + 1], "r");
-	seq = kseq_init(fp);
-	if ((idx = bwa_idx_load(argv[optind], BWA_IDX_BWT|BWA_IDX_BNS)) == 0) return 1;
-	itr = smem_itr_init(idx->bwt);
-	smem_config(itr, min_intv, max_len, max_intv);
-	while (kseq_read(seq) >= 0) {
-		err_printf("SQ\t%s\t%ld", seq->name.s, seq->seq.l);
-		if (print_seq) {
-			err_putchar('\t');
-			err_puts(seq->seq.s);
-		} else err_putchar('\n');
-		for (i = 0; i < seq->seq.l; ++i)
-			seq->seq.s[i] = nst_nt4_table[(int)seq->seq.s[i]];
-		smem_set_query(itr, seq->seq.l, (uint8_t*)seq->seq.s);
-		while ((a = smem_next(itr)) != 0) {
-			for (i = 0; i < a->n; ++i) {
-				bwtintv_t *p = &a->a[i];
-				if ((uint32_t)p->info - (p->info>>32) < min_len) continue;
-				err_printf("EM\t%d\t%d\t%ld", (uint32_t)(p->info>>32), (uint32_t)p->info, (long)p->x[2]);
-				if (p->x[2] <= min_iwidth) {
-					for (k = 0; k < p->x[2]; ++k) {
-						bwtint_t pos;
-						int len, is_rev, ref_id;
-						len  = (uint32_t)p->info - (p->info>>32);
-						pos = bns_depos(idx->bns, bwt_sa(idx->bwt, p->x[0] + k), &is_rev);
-						if (is_rev) pos -= len - 1;
-						bns_cnt_ambi(idx->bns, pos, len, &ref_id);
-						err_printf("\t%s:%c%ld", idx->bns->anns[ref_id].name, "+-"[is_rev], (long)(pos - idx->bns->anns[ref_id].offset) + 1);
-					}
-				} else err_puts("\t*");
-				err_putchar('\n');
-			}
-		}
-		err_puts("//");
-	}
-
-	smem_itr_destroy(itr);
-	bwa_idx_destroy(idx);
-	kseq_destroy(seq);
-	err_gzclose(fp);
 	return 0;
 }

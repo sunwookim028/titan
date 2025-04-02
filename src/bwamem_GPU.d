@@ -58,7 +58,6 @@ src/bwamem_GPU.o : src/bwamem_GPU.cu \
     src/bwt.h \
     src/hashKMerIndex.h \
     src/macro.h \
-    src/batch_config.h \
     src/timer.h \
     src/errHandler.cuh \
     src/bwamem_GPU.cuh \
@@ -652,9 +651,7 @@ src/bwamem_GPU.o : src/bwamem_GPU.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/system/detail/sequential/sequence.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/detail/trivial_sequence.h \
     src/aux.cuh \
-    src/host.h \
-    src/kvec.h \
-    src/utils.h \
+    src/fastmap.h \
     src/kseq.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
@@ -774,8 +771,6 @@ src/bwt.h:
 src/hashKMerIndex.h:
 
 src/macro.h:
-
-src/batch_config.h:
 
 src/timer.h:
 
@@ -1963,10 +1958,6 @@ src/preprocessing.cuh:
 
 src/aux.cuh:
 
-src/host.h:
-
-src/kvec.h:
-
-src/utils.h:
+src/fastmap.h:
 
 src/kseq.h:

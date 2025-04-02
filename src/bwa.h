@@ -299,6 +299,7 @@ typedef struct superbatch_data_t
 	long comment_size; // total length of comment strings
 	long seqs_size;	   // total length of seq strings
 	long qual_size;	   // total length of qual strings
+    uint64_t loading_batch_offset;
 } superbatch_data_t;
 
 /* 
@@ -342,7 +343,7 @@ typedef struct {
 	mem_seed_v* d_seq_seeds;// seeds array for each read
 	mem_chain_v *d_chains;	// chain vectors of size nseqs
 	mem_alnreg_v *d_regs;	// alignment info vectors, size nseqs
-	mem_aln_v * d_alns;		// alignment vectors, size nseqs
+
 	        // arrays for sorting, each has length = n_seqs
 	int *d_sortkeys_in;
 	int *d_seqIDs_in;
@@ -355,8 +356,25 @@ typedef struct {
     int gpu_no;
     int batch_no;
 
-    int *d_num_alns;
-    g3_aln *d_g3_alns;
+    // FIXME leave necessary fields only.
+    uint64_t batch_offset;
+
+	mem_aln_v * d_alns;		// alignment vectors, size nseqs
+
+    int *d_total_alns_num;  // total #alns for this batch of reads.
+    // flattened structure for final alignment results.
+    // produced in 2-pass to determine #alns per read first.
+    // cigars are produced in 3rd pass after determining the lengths first.
+    int *d_alns_num;        // # alns per read. ID: readID
+    int *d_alns_offset;     // alnID offset per read. ID: readID
+
+    int *d_alns_rid;        // rid per aln. ID: alnID
+    int64_t *d_alns_pos;        // pos per aln. ID: alnID
+
+    int *d_total_cigar_len;     // total cigar len for this batch.
+    int *d_alns_cigar_len;        // cigar len per aln. ID: alnID
+    uint32_t *d_alns_cigar_offset;     // cigar offset per aln. ID: alnID
+    int *d_alns_cigar;     // cigars per aln. ID: cigar offset & len.
 
 } process_data_t;
 
@@ -381,8 +399,26 @@ typedef struct {
     int gpu_no;
     int fd_outfile;
 
-    int *d_num_alns;
-    g3_aln *d_alns;
+
+    // FIXME leave necessary fields only.
+    uint64_t batch_offset;
+
+    int *d_total_alns_num;  // total #alns for this batch of reads.
+    // flattened structure for final alignment results.
+    // produced in 2-pass to determine #alns per read first.
+    // cigars are produced in 3rd pass after determining the lengths first.
+    int *d_alns_num;        // # alns per read. ID: readID
+    int *d_alns_offset;     // alnID offset per read. ID: readID
+
+    int *d_alns_rid;        // rid per aln. ID: alnID
+    int64_t *d_alns_pos;        // pos per aln. ID: alnID
+
+    int *d_total_cigar_len;     // total cigar len for this batch.
+    int *d_alns_cigar_len;        // cigar len per aln. ID: alnID
+    uint32_t *d_alns_cigar_offset;     // cigar offset per aln. ID: alnID
+    int *d_alns_cigar;     // cigars per aln. ID: cigar offset & len.
+
+
 } transfer_data_t;
 
 

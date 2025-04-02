@@ -1,4 +1,4 @@
-#include "batch_config.h"
+#include "macro.h"
 #include "CUDAKernel_memmgnt.cuh"
 #include "errHandler.cuh"
 #include <iostream>

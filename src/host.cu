@@ -1,7 +1,10 @@
-#include "host.h"
+#include "zlib.h"
+#include "kseq_wrapper.h"
+
+#include "fastmap.h"
+#include "kstring.h"
+#include "macro.h"
 #include "timer.h"
-#include "batch_config.h"
-#include "offloader.h"
 #include "streams.cuh"
 #include <future>
 #include <sys/time.h>
@@ -15,7 +18,11 @@
 #include <thread>
 using namespace std;
 
-float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
+extern void aligner(superbatch_data_t *data, process_data_t *proc[MAX_NUM_GPUS],\
+        transfer_data_t *tran[MAX_NUM_GPUS], g3_opt_t *g3_opt,
+        double *elapsed_ms);
+
+extern float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
 
 /**
  * @brief initiate memory for a super batch
@@ -42,11 +49,8 @@ static superbatch_data_t *newSuperBatchData()
     batch->seqs_size = 0;
     batch->qual_size = 0;
 
-    if (bwa_verbose >= 3)
-    {
         double nGB_allocated = (double)(SB_MAX_COUNT * sizeof(bseq1_t) + SB_NAME_LIMIT + SB_SEQ_LIMIT + SB_COMMENT_LIMIT + SB_QUAL_LIMIT) / (1024ULL * 1024ULL * 1024ULL);
         fprintf(stderr, "[M::%-25s] allocated %.2f GB on host for superbatch\n", __func__, nGB_allocated);
-    }
     return batch;
 }
 
@@ -79,6 +83,119 @@ static int compareReads(const void *a, const void *b)
 static void sortReads(bseq1_t *reads, int n_reads)
 {
     qsort(reads, n_reads, sizeof(bseq1_t), compareReads);
+}
+
+
+// fastq reader
+
+static inline void trim_readno(kstring_t *s)
+{
+	if (s->l > 2 && s->s[s->l-2] == '/' && isdigit(s->s[s->l-1]))
+		s->l -= 2, s->s[s->l] = 0;
+}
+
+
+static inline void kseq2bseq2(const kseq_t *ks, bseq1_t *s, superbatch_data_t *out, g3_opt_t *g3_opt)
+{
+const uint8_t nst_nt4_table[256] = {
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 5 /*'-'*/, 4, 4,
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4
+};
+	if (ks->seq.l > SEQ_MAXLEN){
+		fprintf(stderr, "[M::%-25s] ERROR: a read has length of %ld, more than the maximum set %d \n", __func__, ks->seq.l, SEQ_MAXLEN);
+		exit(1);
+	}
+
+	char* temp;
+	// copy name to host's memory
+	if (out->name_size+ks->name.l+1 > SB_NAME_LIMIT){ fprintf(stderr, "[W::%s] FATAL: Memory limit exceeded for seq name.\n", __func__); exit(1); }
+	temp = &(out->name[out->name_size]);	// position on the big chunk on host
+	memcpy(temp, ks->name.s, ks->name.l); temp[ks->name.l] = '\0';
+	s->name = (char*)(out->name + out->name_size);
+	out->name_size += ks->name.l + 1;
+
+
+
+	// copy seq to host's memory
+	if (out->seqs_size+ks->seq.l+1 > SB_SEQ_LIMIT){ fprintf(stderr, "[W::%s] FATAL: Memory limit exceeded for seq.\n", __func__); exit(1); }
+	temp = &(out->seqs[out->seqs_size]);
+	//memcpy(temp, ks->seq.s, ks->seq.l); temp[ks->seq.l] = '\0';
+    for(int j=0; j < ks->seq.l; j++)
+    {
+        if(g3_opt->baseline){
+            temp[j] = (ks->seq.s)[j];
+        } else{
+            temp[j] = (char)nst_nt4_table[(int)((ks->seq.s)[j])];
+        }
+    }
+    temp[ks->seq.l] = '\0';
+
+
+	s->seq = (char*)(out->seqs + out->seqs_size);
+	out->seqs_size += ks->seq.l + 1;
+
+
+
+	// copy comment if not NULL
+	if (ks->comment.l == 0){
+		s->comment = NULL;
+	} else {
+		if (out->comment_size+ks->comment.l+1 > SB_COMMENT_LIMIT){ fprintf(stderr, "[W::%s] FATAL: Memory limit exceeded for seq comment.\n", __func__); exit(1); }
+		temp = &(out->comment[out->comment_size]);
+		memcpy(temp, ks->comment.s, ks->comment.l); temp[ks->comment.l] = '\0';
+		s->comment = (char*)(out->comment + out->comment_size);
+		out->comment_size += ks->comment.l + 1;
+	}
+	// copy qual if not NULL
+	if (ks->qual.l == 0){
+		s->qual = NULL;
+	} else {
+		if (out->qual_size+ks->qual.l+1 > SB_QUAL_LIMIT){ fprintf(stderr, "[W::%s] FATAL: Memory limit exceeded for seq qual.\n", __func__); exit(1); }
+		temp = &(out->qual[out->qual_size]);
+		memcpy(temp, ks->qual.s, ks->qual.l); temp[ks->qual.l] = '\0';
+		s->qual = (char*)(out->qual + out->qual_size);
+		out->qual_size += ks->qual.l + 1;
+	}
+	s->l_seq = ks->seq.l;
+	s->l_comment = ks->comment.l;
+	s->l_qual = ks->qual.l;
+	s->l_name = ks->name.l;
+}
+
+/* 
+	load all data to transfer_data
+ */
+void bseq_read2(unsigned long long loading_batch_size, unsigned long long *n_, void *ks1_, void *ks2_, superbatch_data_t *transfer_data, g3_opt_t *g3_opt)
+{
+	kseq_t *ks = (kseq_t*)ks1_, *ks2 = (kseq_t*)ks2_;
+	//unsigned long long size = 0;
+	unsigned long long n = 0;
+	bseq1_t *seqs = transfer_data->reads;
+    //fprintf(stderr, "* %s loading_batch_size %ld\n", __func__, loading_batch_size);
+	while(kseq_read(ks) >= 0 && n < loading_batch_size){
+		trim_readno(&ks->name);
+		kseq2bseq2(ks, &seqs[n], transfer_data, g3_opt);
+
+		seqs[n].id = n;
+		//size += seqs[n].l_seq;
+        n++;
+	}
+	*n_ = n;
+	return;
 }
 
 /**
@@ -168,7 +285,7 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
 
     // Load the next (global) input batch from the host storage
     //   and process the currently loaded batch using all GPUs.
-    //   The offloader thread handles all communication and kernel invocation
+    //   The aligner thread handles all communication and kernel invocation
     //   for GPUs. It also writes results to a single file in host storage.
 #define A 0
 #define B 1
@@ -180,11 +297,11 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
         std::thread t_dataloader(dataloader, aux->ks, aux->ks2, 
                 aux->loading_batch_size, aux->copy_comment, loading, g3_opt,
                 &load_elapsed_ms);
-        std::thread t_offloader(offloader, loaded, proc, tran, g3_opt,
+        std::thread t_aligner(aligner, loaded, proc, tran, g3_opt,
                 &align_elapsed_ms);//, superbatch_results[AB]);
         //std::thread t_storer(storer, aux->fd_outfile, superbatch_results[toggle(AB)]); // possibly merge pulled results
 
-        t_offloader.join();
+        t_aligner.join();
         t_dataloader.join();
 
         fprintf(stderr, "* loaded %ld reads from storage in %.2f ms\n",
@@ -213,11 +330,13 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
     }
 
 
+    std::cerr << std::endl << std::endl;
     fprintf(stderr,"* Wall-clock time mem alloc & transfer: %.2lf seconds\n", walltime_initialize);
-    fprintf(stderr,"* Wall-clock time for processing all %ld reads: %.2lf seconds\n", num_total_reads, walltime_process);
+    std::cerr << std::endl;
+    fprintf(stderr,"* Wall-clock time for aligning all %ld reads (including push & pull time): %.2lf seconds\n", num_total_reads, walltime_process);
 
 
-    std::cerr << std::endl << "* Wall-clock time for alignment across "
+    std::cerr << "* \tWall-clock time for alignment across "
         << g3_opt->num_use_gpus << " GPUs for each stage (avg, min, max):"
         << std::endl;
 
@@ -272,9 +391,9 @@ void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt)
 
     for(int gpuid = 0; gpuid < g3_opt->num_use_gpus; gpuid++){
         std::cerr << std::endl
-            << "* Wall-clock time, GPU #" << gpuid
+            << "* \tWall-clock time, GPU #" << gpuid
             << " total alignment Sum: ";
         std::cerr << std::fixed << std::setprecision(2) 
-            << tprof[gpuid][ALIGN_TOTAL] / 1000 << " seconds" << std::endl;
+            << tprof[gpuid][COMPUTE_TOTAL] / 1000 << " seconds" << std::endl;
     }
 }

@@ -10,7 +10,6 @@
 #include "bwa_CUDA.cuh"
 #include <string.h>
 #include "streams.cuh"
-#include "batch_config.h"
 #include "hashKMerIndex.h"
 #include "seed.cuh"
 #include "preprocessing.cuh"
@@ -25,7 +24,8 @@ using namespace std;
 #include <thrust/sort.h>
 
 #include "aux.cuh"
-#include "host.h"
+
+#include "fastmap.h"
 
 #define PRINT(LABEL) \
     g3_opt->print_mask & BIT(LABEL)
@@ -563,10 +563,6 @@ void bwa_align(int gpuid, process_data_t *proc, g3_opt_t *g3_opt,
             LAUNCH_CHK(*(cudaStream_t*)proc->CUDA_stream);
         }
     }
-
-
-    // pack alns for transferring.
-    //TODO
 
     TIMER_DESTROY;
     if(PRINT(_BUFFER_USAGE)){

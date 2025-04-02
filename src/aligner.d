@@ -1,4 +1,4 @@
-src/host.o : src/host.cu \
+src/aligner.o : src/aligner.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/host_config.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/builtin_types.h \
@@ -50,20 +50,17 @@ src/host.o : src/host.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    ext/zlib-1.3.1/zlib.h \
-    ext/zlib-1.3.1/zconf.h \
-    src/kseq_wrapper.h \
-    src/kseq.h \
-    src/fastmap.h \
+    src/timer.h \
+    src/macro.h \
     src/bwa.h \
     src/bntseq.h \
+    ext/zlib-1.3.1/zlib.h \
+    ext/zlib-1.3.1/zconf.h \
     src/bwt.h \
     src/hashKMerIndex.h \
-    src/kstring.h \
-    src/macro.h \
-    src/timer.h \
-    src/streams.cuh \
-    src/bwamem.h
+    src/bwamem_GPU.cuh \
+    src/bwamem.h \
+    src/streams.cuh
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -167,30 +164,24 @@ src/host.o : src/host.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-ext/zlib-1.3.1/zlib.h:
+src/timer.h:
 
-ext/zlib-1.3.1/zconf.h:
-
-src/kseq_wrapper.h:
-
-src/kseq.h:
-
-src/fastmap.h:
+src/macro.h:
 
 src/bwa.h:
 
 src/bntseq.h:
 
+ext/zlib-1.3.1/zlib.h:
+
+ext/zlib-1.3.1/zconf.h:
+
 src/bwt.h:
 
 src/hashKMerIndex.h:
 
-src/kstring.h:
-
-src/macro.h:
-
-src/timer.h:
-
-src/streams.cuh:
+src/bwamem_GPU.cuh:
 
 src/bwamem.h:
+
+src/streams.cuh:
