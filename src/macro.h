@@ -28,6 +28,8 @@
 #define GPU_SETUP 18
 #define FILE_INPUT 19
 #define FILE_OUTPUT 20
+#define ALIGNER_TOP 21
+#define FILE_INPUT_FIRST 22
 
 // Decoding CIGAR from bam encoding.
 #define BAM2LEN(bam)    ((int)(bam>>4))

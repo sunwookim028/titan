@@ -24,28 +24,36 @@
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
 */
-#include <zlib.h>
+#include <iostream>
+#include <fstream>
+#include <string>
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <cfloat>
 #include <ctype.h>
 #include <math.h>
 #include "macro.h"
 #include "FMI_wrapper.h"
 #include <time.h>
-#include "kopen.h"
-#include "fastmap.h"
 
-#include "kseq_wrapper.h"
+#include <iostream>
+#include <iomanip>
+
+#include "fastmap.h"
+#include "utils.h"
+
+#include "khash.h"
+KHASH_MAP_INIT_STR(str, int)
 
 
 float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
 extern unsigned char nst_nt4_table[256];
 	
-extern void main_gcube(ktp_aux_t *aux, g3_opt_t *g3_opt);
+extern void pipeline(ktp_aux_t *aux, g3_opt_t *g3_opt);
 
 g3_opt_t *g3_opt_init()
 {
@@ -128,6 +136,137 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 /*********************
  * Full index reader *
  *********************/
+bntseq_t *bns_restore_core(const char *ann_filename, const char* amb_filename, const char* pac_filename)
+{
+	char str[8192];
+	FILE *fp;
+	const char *fname;
+	bntseq_t *bns;
+	long long xx;
+	int i;
+	int scanres;
+	bns = (bntseq_t*)calloc(1, sizeof(bntseq_t));
+	{ // read .ann
+		fp = xopen(fname = ann_filename, "r");
+		scanres = fscanf(fp, "%lld%d%u", &xx, &bns->n_seqs, &bns->seed);
+		if (scanres != 3) goto badread;
+		bns->l_pac = xx;
+		bns->anns = (bntann1_t*)calloc(bns->n_seqs, sizeof(bntann1_t));
+		for (i = 0; i < bns->n_seqs; ++i) {
+			bntann1_t *p = bns->anns + i;
+			char *q = str;
+			int c;
+			// read gi and sequence name
+			scanres = fscanf(fp, "%u%s", &p->gi, str);
+			if (scanres != 2) goto badread;
+			p->name = strdup(str);
+			// read fasta comments 
+			while (q - str < sizeof(str) - 1 && (c = fgetc(fp)) != '\n' && c != EOF) *q++ = c;
+			while (c != '\n' && c != EOF) c = fgetc(fp);
+			if (c == EOF) {
+				scanres = EOF;
+				goto badread;
+			}
+			*q = 0;
+			if (q - str > 1 && strcmp(str, " (null)") != 0) p->anno = strdup(str + 1); // skip leading space
+			else p->anno = strdup("");
+			// read the rest
+			scanres = fscanf(fp, "%lld%d%d", &xx, &p->len, &p->n_ambs);
+			if (scanres != 3) goto badread;
+			p->offset = xx;
+		}
+		err_fclose(fp);
+	}
+	{ // read .amb
+		int64_t l_pac;
+		int32_t n_seqs;
+		fp = xopen(fname = amb_filename, "r");
+		scanres = fscanf(fp, "%lld%d%d", &xx, &n_seqs, &bns->n_holes);
+		if (scanres != 3) goto badread;
+		l_pac = xx;
+		xassert(l_pac == bns->l_pac && n_seqs == bns->n_seqs, "inconsistent .ann and .amb files.");
+		bns->ambs = bns->n_holes? (bntamb1_t*)calloc(bns->n_holes, sizeof(bntamb1_t)) : 0;
+		for (i = 0; i < bns->n_holes; ++i) {
+			bntamb1_t *p = bns->ambs + i;
+			scanres = fscanf(fp, "%lld%d%s", &xx, &p->len, str);
+			if (scanres != 3) goto badread;
+			p->offset = xx;
+			p->amb = str[0];
+		}
+		err_fclose(fp);
+	}
+	{ // open .pac
+		bns->fp_pac = xopen(pac_filename, "rb");
+	}
+	return bns;
+
+ badread:
+	if (EOF == scanres) {
+		err_fatal(__func__, "Error reading %s : %s\n", fname, ferror(fp) ? strerror(errno) : "Unexpected end of file");
+	}
+	err_fatal(__func__, "Parse error reading %s\n", fname);
+}
+
+bntseq_t *bns_restore(const char *prefix)
+{  
+	char ann_filename[1024], amb_filename[1024], pac_filename[1024], alt_filename[1024];
+	FILE *fp;
+	bntseq_t *bns;
+	strcat(strcpy(ann_filename, prefix), ".ann");
+	strcat(strcpy(amb_filename, prefix), ".amb");
+	strcat(strcpy(pac_filename, prefix), ".pac");
+	bns = bns_restore_core(ann_filename, amb_filename, pac_filename);
+	if (bns == 0) return 0;
+	if ((fp = fopen(strcat(strcpy(alt_filename, prefix), ".alt"), "r")) != 0) { // read .alt file if present
+		char str[1024];
+		khash_t(str) *h;
+		int c, i, absent;
+		khint_t k;
+		h = kh_init(str);
+		for (i = 0; i < bns->n_seqs; ++i) {
+			k = kh_put(str, h, bns->anns[i].name, &absent);
+			kh_val(h, k) = i;
+		}
+		i = 0;
+		while ((c = fgetc(fp)) != EOF) {
+			if (c == '\t' || c == '\n' || c == '\r') {
+				str[i] = 0;
+				if (str[0] != '@') {
+					k = kh_get(str, h, str);
+					if (k != kh_end(h))
+						bns->anns[kh_val(h, k)].is_alt = 1;
+				}
+				while (c != '\n' && c != EOF) c = fgetc(fp);
+				i = 0;
+			} else {
+				if (i >= 1022) {
+					fprintf(stderr, "[E::%s] sequence name longer than 1023 characters. Abort!\n", __func__);
+					exit(1);
+				}
+				str[i++] = c;
+			}
+		}
+		kh_destroy(str, h);
+		fclose(fp);
+	}
+	return bns;
+}
+
+void bns_destroy(bntseq_t *bns)
+{
+	if (bns == 0) return;
+	else {
+		int i;
+		if (bns->fp_pac) err_fclose(bns->fp_pac);
+		free(bns->ambs);
+		for (i = 0; i < bns->n_seqs; ++i) {
+			free(bns->anns[i].name);
+			free(bns->anns[i].anno);
+		}
+		free(bns->anns);
+		free(bns);
+	}
+}
 
 char *bwa_idx_infer_prefix(const char *hint)
 {
@@ -272,9 +411,12 @@ int main_mem(int argc, char *argv[])
 	void *ko = 0, *ko2 = 0;
 	mem_pestat_t pes[4];
 	ktp_aux_t aux;
-    aux.fd_outfile = 1; // STDOUT
 
 	memset(&aux, 0, sizeof(ktp_aux_t));
+    std::ofstream samfile;
+    std::string samfilepath;
+    aux.samout = &std::cout;
+
 	memset(pes, 0, 4 * sizeof(mem_pestat_t));
 	for (i = 0; i < 4; ++i) pes[i].failed = 1;
 
@@ -321,18 +463,17 @@ int main_mem(int argc, char *argv[])
         } 
 		else if (c == 'Z'){
             g3_opt->batch_size = atoi(optarg);
-            fprintf(stderr, "* per GPU batch size = %d\n", g3_opt->batch_size);
         } 
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
-		else if (c == 'o' || c == 'f'){
-            int fd = open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-            if (fd == -1) {
-                    perror("opening outfile");
-                    exit(1);
+        else if (c == 'o' || c == 'f') {
+            samfilepath = optarg;
+            samfile.open(samfilepath);
+            if(!samfile.is_open()){
+                std::cerr << "ERROR. Could not open output filepath "
+                    << samfilepath << std::endl;
+                exit(EXIT_FAILURE);
             }
-            const char * testmsg = "Musical Hamilton costs $220+ !";
-            write(fd, testmsg, strlen(testmsg));
-            aux.fd_outfile = fd;
+            aux.samout = &samfile;
         }
 		else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
 		else if (c == 'y') opt->max_mem_intv = atol(optarg), opt0.max_mem_intv = 1;
@@ -502,11 +643,11 @@ int main_mem(int argc, char *argv[])
     // load occ2
 	FMI_wrapper *obj = FMI_wrapper_create(argv[optind]);
     FMI_wrapper_load_index(obj, &(aux.loadedIndex));
-    fprintf(stderr, "* all idx except kmer hash loaded\n");
 
 	// load kmer hash
 	aux.kmerHashTab = loadKMerIndex(argv[optind++]);
     fprintf(stderr, "* kmer hash loaded\n");
+    fprintf(stderr, "* all idx loaded\n");
 
 	if (ignore_alt)
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
@@ -543,6 +684,7 @@ int main_mem(int argc, char *argv[])
     // storage loading batch size
 	//aux.actual_loading_batch_size = fixed_loading_batch_size > 0? fixed_loading_batch_size : opt->loading_batch_size * opt->n_threads;
 	aux.loading_batch_size = g3_opt->batch_size * g3_opt->num_use_gpus * loading_factor;
+    fprintf(stderr, "* per GPU batch size = %d\n", g3_opt->batch_size);
     fprintf(stderr, "* storage loading factor %d\n", loading_factor);
     fprintf(stderr, "* storage loading batch size %ld\n", aux.loading_batch_size);
 
@@ -551,12 +693,111 @@ int main_mem(int argc, char *argv[])
     double walltime;
 
     clock_gettime(CLOCK_REALTIME,  &start);
-	main_gcube(&aux, g3_opt);
+	pipeline(&aux, g3_opt);
     clock_gettime(CLOCK_REALTIME,  &end);
 
     walltime = (end.tv_sec - start.tv_sec) +\
                            (end.tv_nsec - start.tv_nsec) / 1e9;
     fprintf(stderr,"* Wall-clock time after index loading: %.2lf seconds\n\n\n", walltime);
+
+    std::cerr << "	setting up GPUs (alloc & idx memcpy): ";
+    std::cerr << std::fixed << std::setprecision(2)
+        << tprof[0][GPU_SETUP] / 1000 << " seconds" << std::endl;
+
+    std::cerr << "	loading the first loading batch: ";
+    std::cerr << std::fixed << std::setprecision(2)
+        << tprof[0][FILE_INPUT_FIRST] / 1000 << " seconds" << std::endl;
+
+    // Runtime profiling stats
+    //  0: min, 1: avg, 2: max.
+    float walltime_seeding[3], walltime_chaining[3], walltime_extending[3];
+    //  0: seeding, 1: chaining, 2: extending. 3: total, 4: push, 5: pull.
+    float tim, min_tim[8], max_tim[8], sum_tim[8];
+    for(int k=0; k<6; k++){
+        min_tim[k] = FLT_MAX; max_tim[k] = FLT_MIN; sum_tim[k] = 0;
+    }
+    float *tims;
+    for(int gpuid = 0; gpuid < g3_opt->num_use_gpus; gpuid++){
+        tims = tprof[gpuid];
+
+        tim = tims[S_SMEM] + tims[S_R2] + tims[S_R3];
+        if(tim < min_tim[0]) min_tim[0] = tim;
+        if(tim > max_tim[0]) max_tim[0] = tim;
+        sum_tim[0] += tim;
+
+        tim = tims[C_SAL] + tims[C_SORT_SEEDS] + tims[C_CHAIN]
+            + tims[C_SORT_CHAINS] + tims[C_FILTER];
+        if(tim < min_tim[1]) min_tim[1] = tim;
+        if(tim > max_tim[1]) max_tim[1] = tim;
+        sum_tim[1] += tim;
+
+        tim = tims[E_PAIRGEN] + tims[E_EXTEND] + tims[E_FILTER_MARK]
+            + tims[E_SORT_ALNS] + tims[E_T_PAIRGEN] + tims[E_TRACEBACK]
+            + tims[E_FINALIZE];
+        if(tim < min_tim[2]) min_tim[2] = tim;
+        if(tim > max_tim[2]) max_tim[2] = tim;
+        sum_tim[2] += tim;
+
+        tim = tims[COMPUTE_TOTAL];
+        if(tim < min_tim[3]) min_tim[3] = tim;
+        if(tim > max_tim[3]) max_tim[3] = tim;
+        sum_tim[3] += tim;
+
+        tim = tims[PUSH_TOTAL];
+        if(tim < min_tim[4]) min_tim[4] = tim;
+        if(tim > max_tim[4]) max_tim[4] = tim;
+        sum_tim[4] += tim;
+
+        tim = tims[PULL_TOTAL];
+        if(tim < min_tim[5]) min_tim[5] = tim;
+        if(tim > max_tim[5]) max_tim[5] = tim;
+        sum_tim[5] += tim;
+
+    }
+    std::cerr << "	\t- compute total: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[3] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[3] / 1000 << ", "
+        << max_tim[3] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "	\t\t- seeding: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[0] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[0] / 1000 << ", "
+        << max_tim[0] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "	\t\t- chaining: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[1] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[1] / 1000 << ", "
+        << max_tim[1] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "	\t\t- extending: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[2] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[2] / 1000 << ", "
+        << max_tim[2] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "	\t- push: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[4] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[4] / 1000 << ", "
+        << max_tim[4] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "	\t- pull: (";
+    std::cerr << std::fixed << std::setprecision(2)
+        << sum_tim[5] / g3_opt->num_use_gpus / 1000 << ", "
+        << min_tim[5] / 1000 << ", "
+        << max_tim[5] / 1000 << ") seconds" << std::endl;
+
+    std::cerr << "	\t---------------------------" << std::endl;
+    std::cerr << "	 In total , FILE input ";
+    std::cerr << std::fixed << std::setprecision(3)
+        << tprof[0][FILE_INPUT] / 1000 << " vs ALIGN "
+        << tprof[0][ALIGNER_TOP] / 1000 << " vs FILE output "
+        << tprof[0][FILE_OUTPUT] / 1000 << " seconds"
+        << std::endl << std::endl;
+
 
 	FMI_wrapper_destroy(obj);
 	free(hdr_line);

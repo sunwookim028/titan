@@ -825,9 +825,9 @@ void FMI_search::load_index()
     }
 
     err_fread_noeof(&first_base, sizeof(uint8_t), 1, saStream);
-    fprintf(stderr, "* first base: %d\n", first_base);
+    //fprintf(stderr, "* first base: %d\n", first_base);
     err_fread_noeof(&sentinel_index, sizeof(int64_t), 1, saStream);
-    fprintf(stderr, "* sentinel-index: %ld\n", sentinel_index);
+    //fprintf(stderr, "* sentinel-index: %ld\n", sentinel_index);
 
 #define USE_BWA_MEM_GPU_SA2REF
 #ifndef USE_BWA_MEM_GPU_SA2REF
@@ -882,6 +882,7 @@ void FMI_search::load_index()
     {
         count2[ii] = count2[ii] + 1;
     }
+    /*
     fprintf(stderr, "* Count:\n");
     int x;
     for(x = 0; x < 5; x++)
@@ -893,6 +894,7 @@ void FMI_search::load_index()
     {
         fprintf(stderr, "%ld,\t%ld\n", x, count2[x]);
     }
+    */
 
     /*
     fprintf(stderr, "* Reading other elements of the index from files %s\n",

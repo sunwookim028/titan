@@ -1,5 +1,6 @@
 // Main function.
 #include <stdio.h>
+#include <iostream>
 #include <string.h>
 
 int main_mem(int argc, char *argv[]);
@@ -31,6 +32,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "[%s] CMD:", __func__);
 		for (i = 0; i < argc; ++i)
 			fprintf(stderr, " %s", argv[i]);
+        std::cerr << std::endl;
 	}
 	return ret;
 }

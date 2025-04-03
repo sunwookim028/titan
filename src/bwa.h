@@ -378,6 +378,23 @@ typedef struct {
 
 } process_data_t;
 
+// alignment results for a batch.
+typedef struct {
+    int batch_size;
+    int total_cnt;
+    int total_cigar_len;
+
+    // for alnIDs per read
+    int *offset;
+    int *cnt;
+
+    int *rid;
+    int64_t *pos;
+    int *cigar; // concatenated BAM-encoded cigars.
+    int *cigar_len;      // for cigar offset & len.
+    int *cigar_offset;   //
+} aligned_batch_t;
+
 
 /* 
     data for transferring from/to GPU
@@ -397,7 +414,6 @@ typedef struct {
     // pointers to CUDA stream, using generic pointers for compatibility with C
     void *CUDA_stream;   // transfer stream
     int gpu_no;
-    int fd_outfile;
 
 
     // FIXME leave necessary fields only.

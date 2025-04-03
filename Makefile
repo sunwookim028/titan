@@ -1,9 +1,9 @@
 # Compilers and flags
 INCLUDES = -Isrc -Iext/zlib-1.3.1 -Iext/safestringlib/include -Iext/bwa-mem2/include
 CXX = g++
-CXXFLAGS = -Wall -O2 -std=c++11 $(INCLUDES) -MMD -MP
+CXXFLAGS = -Wall -O3 -std=c++11 $(INCLUDES) -MMD -MP
 CC = gcc
-CFLAGS = -Wall -Wno-unused-function -O2 $(INCLUDES) -lm -DUSE_MALLOC_WRAPPERS -MMD -MP
+CFLAGS = -Wall -Wno-unused-function -O3 $(INCLUDES) -lm -DUSE_MALLOC_WRAPPERS -MMD -MP
 NVCC = /usr/local/cuda-12.1/bin/nvcc
 CU_ARCH = sm_86
 CU_COMPUTE_ARCH = $(subst sm,compute,$(CU_ARCH))
@@ -43,12 +43,14 @@ CPP_OBJECTS_TARGET2 = src/loadKMerIndex.o \
 		      src/fastmap.o \
 		      src/main.o \
 		      src/FMI_wrapper.o \
-		      src/FMI_search.o
+		      src/FMI_search.o \
+		      src/utils.o \
+		      src/kopen.o \
+		      src/memcpy_bwamem.o
+
 C_OBJECTS = $(C_SOURCES:.c=.o)
 
-C_OBJECTS_TARGET2 = src/bntseq.o \
-		    src/malloc_wrap.o \
-		    src/utils.o \
+C_OBJECTS_TARGET2 = src/malloc_wrap.o \
 		    src/bwt.o \
 
 

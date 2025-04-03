@@ -1,5 +1,13 @@
+#ifndef FASTMAP_H
+#define FASTMAP_H
+
+#include <iostream>
+#include <fstream>
+#include <string>
 #include "bwa.h"
-#include "kseq_wrapper.h"
+#include "zlib.h"
+#include "kseq.h"
+KSEQ_DECLARE(gzFile)
 
 typedef struct
 {
@@ -12,6 +20,10 @@ typedef struct
 	bwaidx_t *idx;
 	kmers_bucket_t *kmerHashTab;
     fmIndex loadedIndex;
-    int fd_outfile;
+    std::ostream *samout;
 } ktp_aux_t;
 
+void *kopen(const char *fn, int *_fd);
+int kclose(void *a);
+
+#endif

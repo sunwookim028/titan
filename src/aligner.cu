@@ -216,6 +216,7 @@ static void offloader(int gpuid, superbatch_data_t *loadedinput,
         tprof[gpuid][PULL_TOTAL] += (float)pull_ms;
         tprof[gpuid][PUSH_TOTAL] += (float)push_ms;
 
+        /*
         std::cerr << "* GPU #" << gpuid << " | ";
         std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
             << compute_ms;
@@ -232,17 +233,20 @@ static void offloader(int gpuid, superbatch_data_t *loadedinput,
             << push_ms;
         std::cerr << "ms | pushed " << push_count << " reads (next batch)"
             << std::endl;
+            */
 
         swapData(batch_A, batch_B);
         if(batch_A->n_seqs == 0){
             pull(batch_B, &pull_ms);
             tprof[gpuid][PULL_TOTAL] += (float)pull_ms;
 
+            /*
             std::cerr << "* GPU #" << gpuid << " | ";
             std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
                 << pull_ms;
             std::cerr << "ms | pulled " << pull_count
                 << " reads (prev. FINAL batch)" << std::endl;
+                */
             break;
         }
     }
