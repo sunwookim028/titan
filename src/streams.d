@@ -57,8 +57,6 @@ src/streams.o : src/streams.cu \
     src/bwt.h \
     src/hashKMerIndex.h \
     src/streams.cuh \
-    src/bwamem.h \
-    src/errHandler.cuh \
     src/CUDAKernel_memmgnt.cuh \
     src/macro.h
 
@@ -177,10 +175,6 @@ src/bwt.h:
 src/hashKMerIndex.h:
 
 src/streams.cuh:
-
-src/bwamem.h:
-
-src/errHandler.cuh:
 
 src/CUDAKernel_memmgnt.cuh:
 

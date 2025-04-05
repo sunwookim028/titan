@@ -335,7 +335,7 @@ bwaidx_t *bwa_idx_load_from_disk(const char *hint, int which)
 		idx->bns = bns_restore(prefix);
 		for (i = c = 0; i < idx->bns->n_seqs; ++i)
 			if (idx->bns->anns[i].is_alt) ++c;
-			fprintf(stderr, "[M::%s] read %d ALT contigs\n", __func__, c);
+            std::cerr << "* read " << c << " ALT contigs\n";
 		if (which & BWA_IDX_PAC) {
 			idx->pac = (uint8_t*)calloc(idx->bns->l_pac/4+1, 1);
             // FIXME error handling

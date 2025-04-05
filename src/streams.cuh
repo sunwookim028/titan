@@ -1,7 +1,6 @@
 #ifndef CUDASTREAMS_CUH
 #define CUDASTREAMS_CUH
 #include <stdint.h>
-#include "bwamem.h"
 #include "hashKMerIndex.h"
 #include "bwa.h"
 

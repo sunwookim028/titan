@@ -1,4 +1,4 @@
-src/bwamem_GPU.o : src/bwamem_GPU.cu \
+src/bwamem.o : src/bwamem.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/host_config.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/builtin_types.h \
@@ -50,23 +50,20 @@ src/bwamem_GPU.o : src/bwamem_GPU.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    src/utils_CUDA.cuh \
+    src/streams.cuh \
+    src/hashKMerIndex.h \
+    src/bwt.h \
     src/bwa.h \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
-    src/bwt.h \
-    src/hashKMerIndex.h \
+    src/CUDAKernel_memmgnt.cuh \
+    src/utils_CUDA.cuh \
     src/macro.h \
     src/timer.h \
-    src/errHandler.cuh \
-    src/bwamem_GPU.cuh \
-    src/bwamem.h \
-    src/streams.cuh \
-    src/CUDAKernel_memmgnt.cuh \
     src/bwt_CUDA.cuh \
-    src/bntseq_CUDA.cuh \
-    src/bwa_CUDA.cuh \
+    src/fastmap.h \
+    src/kseq.h \
     src/seed.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/cub.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/config.cuh \
@@ -321,6 +318,7 @@ src/bwamem_GPU.o : src/bwamem_GPU.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/util_allocator.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/host/mutex.cuh \
     src/preprocessing.cuh \
+    src/aux.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/device_vector.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/detail/vector_base.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/normal_iterator.h \
@@ -650,9 +648,7 @@ src/bwamem_GPU.o : src/bwamem_GPU.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/system/detail/adl/sequence.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/system/detail/sequential/sequence.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/detail/trivial_sequence.h \
-    src/aux.cuh \
-    src/fastmap.h \
-    src/kseq.h
+    src/final_pack.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -756,7 +752,11 @@ src/bwamem_GPU.o : src/bwamem_GPU.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-src/utils_CUDA.cuh:
+src/streams.cuh:
+
+src/hashKMerIndex.h:
+
+src/bwt.h:
 
 src/bwa.h:
 
@@ -766,29 +766,19 @@ ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
-src/bwt.h:
+src/CUDAKernel_memmgnt.cuh:
 
-src/hashKMerIndex.h:
+src/utils_CUDA.cuh:
 
 src/macro.h:
 
 src/timer.h:
 
-src/errHandler.cuh:
-
-src/bwamem_GPU.cuh:
-
-src/bwamem.h:
-
-src/streams.cuh:
-
-src/CUDAKernel_memmgnt.cuh:
-
 src/bwt_CUDA.cuh:
 
-src/bntseq_CUDA.cuh:
+src/fastmap.h:
 
-src/bwa_CUDA.cuh:
+src/kseq.h:
 
 src/seed.cuh:
 
@@ -1297,6 +1287,8 @@ src/seed.cuh:
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/host/mutex.cuh:
 
 src/preprocessing.cuh:
+
+src/aux.cuh:
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/device_vector.h:
 
@@ -1956,8 +1948,4 @@ src/preprocessing.cuh:
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/thrust/detail/trivial_sequence.h:
 
-src/aux.cuh:
-
-src/fastmap.h:
-
-src/kseq.h:
+src/final_pack.h:

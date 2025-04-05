@@ -1,7 +1,6 @@
-#include "bwa_CUDA.cuh"
-#include "bntseq_CUDA.cuh"
+#include "bntseq.h"
 #include "CUDAKernel_memmgnt.cuh"
-#include "ksw_CUDA.cuh"
+#include "ksw.h"
 #include "kstring_CUDA.cuh"
 
 // Generate CIGAR when the alignment end points are known

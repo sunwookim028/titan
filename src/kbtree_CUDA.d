@@ -51,12 +51,11 @@ src/kbtree_CUDA.o : src/kbtree_CUDA.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
     src/kbtree_CUDA.cuh \
-    src/bwamem.h \
-    src/bwt.h \
+    src/bwa.h \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
-    src/bwa.h \
+    src/bwt.h \
     src/hashKMerIndex.h \
     src/CUDAKernel_memmgnt.cuh
 
@@ -164,9 +163,7 @@ src/kbtree_CUDA.o : src/kbtree_CUDA.cu \
 
 src/kbtree_CUDA.cuh:
 
-src/bwamem.h:
-
-src/bwt.h:
+src/bwa.h:
 
 src/bntseq.h:
 
@@ -174,7 +171,7 @@ ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
-src/bwa.h:
+src/bwt.h:
 
 src/hashKMerIndex.h:
 

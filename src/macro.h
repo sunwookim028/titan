@@ -4,6 +4,9 @@
 #define MAX_NUM_GPUS 8
 #define MAX_NUM_STEPS 24
 
+#define NUM_BLOCKS 128
+#define BLOCKDIM 256
+
 // Runtime profiling macros
 #define S_SMEM 0
 #define S_R2    1
@@ -37,6 +40,9 @@
 
 // constants
 #define WARPSIZE 32
+
+#define MB_SIZE (1<<20)
+#define GB_SIZE (1<<30)
 
 #define SB_MAX_COUNT 1000000                   // max number of reads
 
@@ -113,5 +119,18 @@
 #define PLEN(seed) ((uint32_t)(seed->info) - (uint32_t)((seed->info)>>32))
 #define PN(seed) ((uint32_t)(seed->info) - 1)
 #define PM(seed) ((uint32_t)(seed->info >> 32))
+
+
+// Err handling
+#include <iostream>
+#define CUDA_CHECK(call) \
+    { \
+        cudaError_t err = call; \
+        if (err != cudaSuccess) { \
+            std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ << ": " \
+                      << cudaGetErrorString(err) << std::endl; \
+            exit(EXIT_FAILURE); \
+        } \
+    } 
 
 #endif 

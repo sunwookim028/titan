@@ -1,4 +1,4 @@
-#include "bntseq_CUDA.cuh"
+#include "bntseq.h"
 #include "CUDAKernel_memmgnt.cuh"
 
 #define _set_pac(pac, l, c) ((pac)[(l)>>2] |= (c)<<((~(l)&3)<<1))

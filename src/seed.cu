@@ -3,7 +3,6 @@
 #include "CUDAKernel_memmgnt.cuh"
 
 #include "fmindex.cuh"
-//#include "bntseq_CUDA.cuh"
 #include <string.h>
 #include <cub/cub.cuh>
 #include <chrono>

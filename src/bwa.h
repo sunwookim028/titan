@@ -327,7 +327,7 @@ typedef struct {
     fmIndex *d_fmIndex; //Added
 
         // reads on device
-	int n_seqs;			// number of reads on device
+	int batch_size;			// number of reads on device
 	int64_t n_processed;	// number of reads processed prior to this batch
 	bseq1_t *d_seqs;		// reads
     char *d_seq_name_ptr, *d_seq_comment_ptr, *d_seq_seq_ptr, *d_seq_qual_ptr, *d_seq_sam_ptr;  // name, comment, seq, qual, sam output
@@ -344,7 +344,7 @@ typedef struct {
 	mem_chain_v *d_chains;	// chain vectors of size nseqs
 	mem_alnreg_v *d_regs;	// alignment info vectors, size nseqs
 
-	        // arrays for sorting, each has length = n_seqs
+	        // arrays for sorting, each has length = batch_size
 	int *d_sortkeys_in;
 	int *d_seqIDs_in;
 	int *d_sortkeys_out;
@@ -401,7 +401,7 @@ typedef struct {
  */
 typedef struct {
     // reads on device
-	int n_seqs;			// number of reads
+	int batch_size;			// number of reads
 	int64_t total_input;	// number of reads input prior to this batch
 	int64_t total_output;	// number of reads output prior to this batch
 	bseq1_t *d_seqs;		// reads

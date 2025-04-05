@@ -1,7 +1,7 @@
 #ifndef _KBTREE_CUDA_CUH
 #define _KBTREE_CUDA_CUH
+#include "bwa.h"
 #include <stdint.h>
-#include "bwamem.h"
 
 
 typedef struct {

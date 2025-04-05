@@ -1,4 +1,4 @@
-src/ksw_CUDA.o : src/ksw_CUDA.cu \
+src/bwa.o : src/bwa.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/host_config.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/builtin_types.h \
@@ -50,15 +50,15 @@ src/ksw_CUDA.o : src/ksw_CUDA.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    src/ksw_CUDA.cuh \
-    src/bwa.h \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
+    src/CUDAKernel_memmgnt.cuh \
+    src/ksw.h \
+    src/bwa.h \
     src/bwt.h \
     src/hashKMerIndex.h \
-    src/macro.h \
-    src/CUDAKernel_memmgnt.cuh
+    src/kstring_CUDA.cuh
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -162,20 +162,20 @@ src/ksw_CUDA.o : src/ksw_CUDA.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-src/ksw_CUDA.cuh:
-
-src/bwa.h:
-
 src/bntseq.h:
 
 ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
+src/CUDAKernel_memmgnt.cuh:
+
+src/ksw.h:
+
+src/bwa.h:
+
 src/bwt.h:
 
 src/hashKMerIndex.h:
 
-src/macro.h:
-
-src/CUDAKernel_memmgnt.cuh:
+src/kstring_CUDA.cuh:

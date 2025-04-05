@@ -61,8 +61,7 @@ src/host.o : src/host.cu \
     src/kstring.h \
     src/macro.h \
     src/timer.h \
-    src/streams.cuh \
-    src/bwamem.h
+    src/streams.cuh
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -189,5 +188,3 @@ src/macro.h:
 src/timer.h:
 
 src/streams.cuh:
-
-src/bwamem.h:

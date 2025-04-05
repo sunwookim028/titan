@@ -1,13 +1,10 @@
-#include "errHandler.cuh"
 #include "kbtree_CUDA.cuh"
 #include "bwa.h"
-#include "bwamem_GPU.cuh"
 #include "CUDAKernel_memmgnt.cuh"
 #include "bwt_CUDA.cuh"
-#include "bntseq_CUDA.cuh"
+#include "bntseq.h"
 #include "ksort_CUDA.h"
-#include "ksw_CUDA.cuh"
-#include "bwa_CUDA.cuh"
+#include "ksw.h"
 #include "kstring_CUDA.cuh"
 #include <string.h>
 #include "streams.cuh"
@@ -27,6 +24,7 @@ using namespace std;
 
 #include "aux.cuh"
 
+extern __device__ uint32_t *bwa_gen_cigar2_gpu(const int8_t mat[25], int o_del, int e_del, int o_ins, int e_ins, int w_, int64_t l_pac, const uint8_t *pac, int l_query, uint8_t *query, int64_t rb, int64_t re, int *score, int *n_cigar, int *NM, void* d_buffer_ptr);
 
 
 
@@ -2934,7 +2932,6 @@ __global__ void traceback(
 
 /* execute at aln level 
    calculate pos, rid & fix cigar: remove leading or trailing del, add clipping
-   TODO gen sam
  */
 __global__ void finalize(
         const mem_opt_t *d_opt,
@@ -3019,7 +3016,22 @@ __global__ void finalize(
     a->flag = flag;
 }
 
+__global__
+void packResults(                   // ID
+        int *d_count_offsets,       // readID -> alnID
+        int *d_rid,                 // alnID
+        uint64_t *d_pos,            // alnID
+        uint32_t *d_cigar,          // cigar offset
+        int *d_cigar_offsets,       // alnID
+        mem_aln_v *d_alns           // readID
+        )
+{
+    int readID = blockDim.x * blockIdx.x + threadIdx.x;
+    int count = d_alns[readID].n;
+    mem_aln_t *a = d_alns[readID].a;
+}
 
+#if 0
 /* convert aln to SAM strings
    run at aln level
    assume that reads are not paired
@@ -3155,3 +3167,4 @@ __global__ void SAMGEN_concatenate_kernel(
     }
     d_seq_sam_ptr[offset] = 0;	// NULL-terminating char
 }
+#endif

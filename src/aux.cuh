@@ -4,8 +4,7 @@
 #include "bwa.h"
 #include "CUDAKernel_memmgnt.cuh"
 #include "bwt_CUDA.cuh"
-#include "bntseq_CUDA.cuh"
-#include "bwa_CUDA.cuh"
+#include "bntseq.h"
 #include <string.h>
 #include "streams.cuh"
 #include "macro.h"

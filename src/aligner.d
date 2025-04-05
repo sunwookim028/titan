@@ -58,8 +58,6 @@ src/aligner.o : src/aligner.cu \
     ext/zlib-1.3.1/zconf.h \
     src/bwt.h \
     src/hashKMerIndex.h \
-    src/bwamem_GPU.cuh \
-    src/bwamem.h \
     src/streams.cuh
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
@@ -179,9 +177,5 @@ ext/zlib-1.3.1/zconf.h:
 src/bwt.h:
 
 src/hashKMerIndex.h:
-
-src/bwamem_GPU.cuh:
-
-src/bwamem.h:
 
 src/streams.cuh:

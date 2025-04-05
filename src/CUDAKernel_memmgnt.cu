@@ -1,6 +1,5 @@
 #include "macro.h"
 #include "CUDAKernel_memmgnt.cuh"
-#include "errHandler.cuh"
 #include <iostream>
 
 
@@ -17,12 +16,12 @@ __host__ void* CUDA_BufferInit(int batch_size){
 
 	// allocate NBUFFERPOOLS on device
 	for (int i=0; i<NBUFFERPOOLS; i++)
-		gpuErrchk(cudaMalloc(&pools[i], (batch_size << 11)));
+		CUDA_CHECK(cudaMalloc(&pools[i], (batch_size << 11)));
 
 	// allocate array of pointers on device and copy the pool pointers over
 	void** d_pools;
-	gpuErrchk(cudaMalloc((void**)&d_pools, NBUFFERPOOLS*sizeof(void*)));
-	gpuErrchk(cudaMemcpy(d_pools, pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMalloc((void**)&d_pools, NBUFFERPOOLS*sizeof(void*)));
+	CUDA_CHECK(cudaMemcpy(d_pools, pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyHostToDevice));
 
 	free(pools);
 	return (void*)d_pools;
@@ -32,7 +31,7 @@ __host__ void CUDAResetBufferPool(void* d_buffer_pools, int batch_size){
 	// first coppy the array of pool pointers to host
 	void** h_pools;
 	h_pools = (void**)malloc(NBUFFERPOOLS*sizeof(void*));
-	gpuErrchk( cudaMemcpy(h_pools, d_buffer_pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyDeviceToHost) );
+	CUDA_CHECK(cudaMemcpy(h_pools, d_buffer_pools, NBUFFERPOOLS*sizeof(void*), cudaMemcpyDeviceToHost));
 
 	// reset memory info at the head of each pool
 	CUDAKernel_mem_info d_pool_info;		// intermediate data on host
@@ -44,7 +43,7 @@ __host__ void CUDAResetBufferPool(void* d_buffer_pools, int batch_size){
 		// set limit of the pool
 		d_pool_info.end_offset = (unsigned)(batch_size << 11);
 		// copy d_pool_info to the start of the pool
-		gpuErrchk( cudaMemcpy(pool_addr, &d_pool_info, sizeof(CUDAKernel_mem_info), cudaMemcpyHostToDevice) );
+		CUDA_CHECK(cudaMemcpy(pool_addr, &d_pool_info, sizeof(CUDAKernel_mem_info), cudaMemcpyHostToDevice));
 	}
 
 	free(h_pools);

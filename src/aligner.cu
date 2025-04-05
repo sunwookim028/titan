@@ -2,7 +2,6 @@
 #include "macro.h"
 #include "bwa.h"
 #include <locale.h>
-#include "bwamem_GPU.cuh"
 #include "streams.cuh"
 #include <future>
 #include <iostream>
@@ -19,19 +18,21 @@
 #include <thread>
 
 extern float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
+extern void bwa_align(int gpuid, process_data_t *process_data, g3_opt_t *g3_opt,
+            double *func_elapsed_ms);
 
 /**
  * @brief convert current host addresses on a minibatch's transfer_data to their (future) addresses on GPU
  * assuming name, seq, comment, qual pointers on trasnfer_data still points to host memory
  *
  * @param seqs
- * @param n_seqs
+ * @param batch_size
  * @param transfer_data transfer_data_t object where these reads reside
  */
 void convert2DevAddr(transfer_data_t *transfer_data)
 {
 	auto reads = transfer_data->h_seqs;
-	auto n_reads = transfer_data->n_seqs;
+	auto n_reads = transfer_data->batch_size;
 	auto first_read = reads[0];
 	for (int i = 0; i < n_reads; i++)
 	{
@@ -69,12 +70,12 @@ void copyReads2PinnedMem(superbatch_data_t *superbatch_data, transfer_data_t *tr
 
 /**
  * @brief load a small batch from superbatch to transfer_data, up to MB_MAX_COUNT. 
- * Return number of reads loaded into transfer_data->n_seqs. return 0 if no read loaded
+ * Return number of reads loaded into transfer_data->batch_size. return 0 if no read loaded
  * after loading, translate reads' addresses to GPU and transfer to GPU,
  * @param transfer_data
  * @param superbatch_data
  * @param num_loaded number of reads loaded from this superbatch before this minibatch
- * @return int number of reads loaded into transfer_data->n_seqs
+ * @return int number of reads loaded into transfer_data->batch_size
  */
 static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
         int *push_counter, std::mutex *push_m, g3_opt_t *g3_opt,
@@ -108,7 +109,7 @@ static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
 
 
     if(push_count == 0){
-        tran->n_seqs = 0;
+        tran->batch_size = 0;
         *actual_push_count = 0;
         FUNC_TIMER_END;
         return;
@@ -116,7 +117,7 @@ static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
 
     // Push inputs to GPU device. ASSUMED MEMCPY DOES NOT FAIL
 	resetTransfer(tran);
-    tran->n_seqs = push_count;
+    tran->batch_size = push_count;
 
 	copyReads2PinnedMem(loaded_input, tran, push_offset, push_count);
 	// at this point, all pointers on tran still point to name, seq, comment, qual addresses on loaded
@@ -142,7 +143,7 @@ static void push(transfer_data_t *tran, superbatch_data_t *loaded_input,
 static void pull(transfer_data_t *tran, double *func_elapsed_ms)
 {
     FUNC_TIMER_START;
-    if (tran->n_seqs==0){
+    if (tran->batch_size==0){
         FUNC_TIMER_END;
         return;
     }
@@ -207,46 +208,19 @@ static void offloader(int gpuid, superbatch_data_t *loadedinput,
     int push_count, pull_count;
     while(true){
         std::thread t_compute(bwa_align, gpuid, batch_A, g3_opt, &compute_ms);
-        pull_count = batch_B->n_seqs;
+        pull_count = batch_B->batch_size;
         pull(batch_B, &pull_ms);
         push(batch_B, loadedinput, push_counter, push_m, g3_opt, 
                 &push_count, &push_ms);
         t_compute.join();
+        swapData(batch_A, batch_B);
+
         tprof[gpuid][COMPUTE_TOTAL] += (float)compute_ms;
         tprof[gpuid][PULL_TOTAL] += (float)pull_ms;
         tprof[gpuid][PUSH_TOTAL] += (float)push_ms;
-
-        /*
-        std::cerr << "* GPU #" << gpuid << " | ";
-        std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
-            << compute_ms;
-        std::cerr << "ms | GPU-computed " << batch_A->n_seqs << " reads" << std::endl;
-
-        std::cerr << "* GPU #" << gpuid << " | ";
-        std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
-            << pull_ms;
-        std::cerr << "ms | pulled " << pull_count << " reads (prev. batch)"
-            << std::endl;
-
-        std::cerr << "* GPU #" << gpuid << " | ";
-        std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
-            << push_ms;
-        std::cerr << "ms | pushed " << push_count << " reads (next batch)"
-            << std::endl;
-            */
-
-        swapData(batch_A, batch_B);
-        if(batch_A->n_seqs == 0){
+        if(batch_A->batch_size == 0){
             pull(batch_B, &pull_ms);
             tprof[gpuid][PULL_TOTAL] += (float)pull_ms;
-
-            /*
-            std::cerr << "* GPU #" << gpuid << " | ";
-            std::cerr << std::fixed << std::setprecision(2) << std::setw(8) 
-                << pull_ms;
-            std::cerr << "ms | pulled " << pull_count
-                << " reads (prev. FINAL batch)" << std::endl;
-                */
             break;
         }
     }

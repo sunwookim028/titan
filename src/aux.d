@@ -50,24 +50,19 @@ src/aux.o : src/aux.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    src/errHandler.cuh \
     src/kbtree_CUDA.cuh \
-    src/bwamem.h \
-    src/bwt.h \
+    src/bwa.h \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
-    src/bwa.h \
+    src/bwt.h \
     src/hashKMerIndex.h \
-    src/bwamem_GPU.cuh \
-    src/streams.cuh \
     src/CUDAKernel_memmgnt.cuh \
     src/bwt_CUDA.cuh \
-    src/bntseq_CUDA.cuh \
     src/ksort_CUDA.h \
-    src/ksw_CUDA.cuh \
-    src/bwa_CUDA.cuh \
+    src/ksw.h \
     src/kstring_CUDA.cuh \
+    src/streams.cuh \
     src/macro.h \
     src/seed.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/cub.cuh \
@@ -756,13 +751,9 @@ src/aux.o : src/aux.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-src/errHandler.cuh:
-
 src/kbtree_CUDA.cuh:
 
-src/bwamem.h:
-
-src/bwt.h:
+src/bwa.h:
 
 src/bntseq.h:
 
@@ -770,27 +761,21 @@ ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
-src/bwa.h:
+src/bwt.h:
 
 src/hashKMerIndex.h:
-
-src/bwamem_GPU.cuh:
-
-src/streams.cuh:
 
 src/CUDAKernel_memmgnt.cuh:
 
 src/bwt_CUDA.cuh:
 
-src/bntseq_CUDA.cuh:
-
 src/ksort_CUDA.h:
 
-src/ksw_CUDA.cuh:
-
-src/bwa_CUDA.cuh:
+src/ksw.h:
 
 src/kstring_CUDA.cuh:
+
+src/streams.cuh:
 
 src/macro.h:
 

@@ -9,8 +9,8 @@ CU_ARCH = sm_86
 CU_COMPUTE_ARCH = $(subst sm,compute,$(CU_ARCH))
 
 __NVFLAGS = -ccbin /usr/bin/g++-11 --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -Xptxas -O4 -Xcompiler -O4
-_NVFLAGS = -ccbin /usr/bin/g++-11 --device-c --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -MMD -MP
-NVFLAGS = $(_NVFLAGS) -Xptxas -O4 -Xcompiler -O4 
+_NVFLAGS = -ccbin /usr/bin/g++-11 --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -MMD -MP
+NVFLAGS = $(_NVFLAGS) -dc -Xptxas -O4 -Xcompiler -O4 
 NVFLAGS_DEBUG = $(_NVFLAGS) -lineinfo -Xcompiler -Wall -Xptxas -Werror 
 
 
@@ -63,9 +63,6 @@ CU_OBJECTS_LINKER = src/gpu_link.o
 DEPS_FILE = .depend
 
 
-# Static library file
-LIB_FRONTEND = src/libbwa.a
-
 
 # Compile rules
 
@@ -85,24 +82,21 @@ all: depend $(TARGET1) $(TARGET2)
 
 
 # Linking rule
-$(TARGET1): $(CPP_OBJECTS_TARGET1) $(LIB_FRONTEND) -lz
-	$(CXX) $(LINKFLAGS) -o $@ $^
+$(TARGET1): $(CPP_OBJECTS_TARGET1)
+	$(CXX) $(LINKFLAGS) -o $@ $^ -lz
 
 $(TARGET2): $(CU_OBJECTS_LINKER) $(CU_OBJECTS) $(CPP_OBJECTS_TARGET2) $(C_OBJECTS_TARGET2)
 	$(CXX) $(LINKFLAGS) -L. -o $@ $^ $(LIBS) 
 
-$(TARGET2_DEBUG): $(CU_DEBUG_OBJECTS_LINKER) $(CU_DEBUG_OBJECTS) $(CPP_OBJECTS_TARGET2) $(LIB_FRONTEND) 
+$(TARGET2_DEBUG): $(CU_DEBUG_OBJECTS_LINKER) $(CU_DEBUG_OBJECTS) $(CPP_OBJECTS_TARGET2)
 	$(CXX) $(LINKFLAGS) -L. -o $@ $^ -lz -lcudart -lcudadevrt -lsafestring
 
 
-$(LIB_FRONTEND): $(C_OBJECTS)
-	$(AR) $(ARFLAGS) -o $@ $^
-
 $(CU_OBJECTS_LINKER): $(CU_OBJECTS)
-	$(NVCC) $(__NVFLAGS) --device-link $^ --output-file $@
+	$(NVCC) $(__NVFLAGS) -dlink $^ --output-file $@
 
 $(CU_DEBUG_OBJECTS_LINKER): $(CU_DEBUG_OBJECTS)
-	$(NVCC) $(__NVFLAGS) --device-link $^ --output-file $@
+	$(NVCC) $(__NVFLAGS) -dlink $^ --output-file $@
 
 
 #########################################################################################

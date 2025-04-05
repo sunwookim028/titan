@@ -30,7 +30,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <zlib.h>
+#ifdef __cplusplus
 #include <cerrno>
+#else
+#include <errno.h>
+#endif
 
 #ifdef __GNUC__
 // Tell GCC to validate printf format string and args

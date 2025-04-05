@@ -2,7 +2,7 @@
 #include "types.h"
 #include "macro.h"
 */
-#include "ksw_CUDA.cuh"
+#include "ksw.h"
 /*	Very naive implementation of banded Smith-Waterman extension
 	Wastes some (perhaps many) threads over the boundary of the band.
 */ 

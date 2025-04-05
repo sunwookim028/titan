@@ -51,8 +51,7 @@ src/CUDAKernel_memmgnt.o : src/CUDAKernel_memmgnt.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
     src/macro.h \
-    src/CUDAKernel_memmgnt.cuh \
-    src/errHandler.cuh
+    src/CUDAKernel_memmgnt.cuh
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -159,5 +158,3 @@ src/CUDAKernel_memmgnt.o : src/CUDAKernel_memmgnt.cu \
 src/macro.h:
 
 src/CUDAKernel_memmgnt.cuh:
-
-src/errHandler.cuh:

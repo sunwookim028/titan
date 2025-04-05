@@ -1,4 +1,4 @@
-#include "ksw_CUDA.cuh"
+#include "ksw.h"
 #include "macro.h"
 #include "CUDAKernel_memmgnt.cuh"
 

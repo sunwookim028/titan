@@ -57,7 +57,7 @@ src/preprocessing.o : src/preprocessing.cu \
     ext/zlib-1.3.1/zconf.h \
     src/bwt.h \
     src/hashKMerIndex.h \
-    src/errHandler.cuh
+    src/macro.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -175,4 +175,4 @@ src/bwt.h:
 
 src/hashKMerIndex.h:
 
-src/errHandler.cuh:
+src/macro.h:

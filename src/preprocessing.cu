@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "preprocessing.cuh"
 #define HASH_LEN 7
-#include "errHandler.cuh"
+#include "macro.h"
 
 __device__ __constant__ unsigned char d_nst_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -105,21 +105,21 @@ int* preprocessing1(bseq1_t* d_seqs, int n_seqs)
 	cudaMemset(d_bucket_N, 0, n_bucket*sizeof(int));
 	int* d_bucket_ids;
 	int bucket_maxlen = n_seqs/n_bucket<<10; // each bucket has length = n_seqs/n_bucket*1024
-	gpuErrchk(cudaMalloc((void**)&d_bucket_ids, n_bucket*bucket_maxlen*sizeof(int)));
+	CUDA_CHECK(cudaMalloc((void**)&d_bucket_ids, n_bucket*bucket_maxlen*sizeof(int)));
 	// launch kernel to hash and drop to bucket
 	dim3 dimGrid(ceil((double)n_seqs/32));
 	dim3 dimBlock(32);
 	hash_kernel <<< dimGrid, dimBlock, 0 >>> (d_seqs, n_seqs, d_bucket_N, d_bucket_ids, bucket_maxlen);
-	gpuErrchk( cudaPeekAtLastError() );
-	gpuErrchk( cudaDeviceSynchronize() );
+	CUDA_CHECK(cudaPeekAtLastError());
+	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// allocate hash map
 	int* d_hash_map;
 	cudaMalloc((void**)&d_hash_map, n_seqs*sizeof(int));
 	// launch kernel to calculate map
 	hash_map_kernel <<< dimGrid, dimBlock, 0 >>> (d_bucket_N, d_bucket_ids, n_bucket, bucket_maxlen, d_hash_map, n_seqs);
-	gpuErrchk( cudaPeekAtLastError() );
-	gpuErrchk( cudaDeviceSynchronize() );
+	CUDA_CHECK(cudaPeekAtLastError());
+	CUDA_CHECK(cudaDeviceSynchronize());
 
 	cudaFree(d_bucket_ids); cudaFree(d_bucket_N);
 	return d_hash_map;
