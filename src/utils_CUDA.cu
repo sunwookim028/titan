@@ -32,7 +32,8 @@ __global__ void printIntv(smem_aux_t *d_intvvecs, int readID, int type)
     bwtintv_t *intvs = d_intvvecs[readID].mem.a;
     int num_intv = d_intvvecs[readID].mem.n;
     int intv_type = 0;
-    //printf("DEBUG1 num_seeds %d\n", num_intv);
+    printf("seq_id %d num_seeds %d\n", readID, num_intv);
+    /*
     for(bwtintv_t *intv = intvs; intv < intvs + num_intv; intv++) {
         if(intv->x[2] > 0) {
             printf("%s %d %d %d %d %lu\n", phasename[type], readID, \
@@ -43,6 +44,7 @@ __global__ void printIntv(smem_aux_t *d_intvvecs, int readID, int type)
         intv_type = intv_type > 2 ? 2 : intv_type;
         }
     }
+    */
 }
 
 

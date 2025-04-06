@@ -52,7 +52,7 @@ src/bwt_CUDA.o : src/bwt_CUDA.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
     src/bwt_CUDA.cuh \
     src/bwt.h \
-    src/CUDAKernel_memmgnt.cuh \
+    src/gmem_alloc.h \
     src/hashKMerIndex.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
@@ -161,6 +161,6 @@ src/bwt_CUDA.cuh:
 
 src/bwt.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/gmem_alloc.h:
 
 src/hashKMerIndex.h:

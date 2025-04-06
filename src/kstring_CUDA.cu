@@ -1,4 +1,4 @@
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 #include "kstring_CUDA.cuh"
 #include <stdio.h>
 #include <stdarg.h>

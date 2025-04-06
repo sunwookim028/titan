@@ -1,0 +1,2 @@
+k_cnt=$1;
+./g3 mem -g 4 -l $k_cnt -i 1 -z 1 -F 200 -Z 80000 -o testing.sam /datasets/bwa/ref/hg38/hg38.fa /datasets/bwa/reads/hg38/76bp.full

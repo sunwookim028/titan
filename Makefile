@@ -1,7 +1,7 @@
 # Compilers and flags
 INCLUDES = -Isrc -Iext/zlib-1.3.1 -Iext/safestringlib/include -Iext/bwa-mem2/include
 CXX = g++
-CXXFLAGS = -Wall -O3 -std=c++11 $(INCLUDES) -MMD -MP
+CXXFLAGS = -Wall -std=c++11 $(INCLUDES) -MMD -MP -O3 #-lineinfo -g #-O0
 CC = gcc
 CFLAGS = -Wall -Wno-unused-function -O3 $(INCLUDES) -lm -DUSE_MALLOC_WRAPPERS -MMD -MP
 NVCC = /usr/local/cuda-12.1/bin/nvcc
@@ -9,9 +9,11 @@ CU_ARCH = sm_86
 CU_COMPUTE_ARCH = $(subst sm,compute,$(CU_ARCH))
 
 __NVFLAGS = -ccbin /usr/bin/g++-11 --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -Xptxas -O4 -Xcompiler -O4
-_NVFLAGS = -ccbin /usr/bin/g++-11 --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -MMD -MP
-NVFLAGS = $(_NVFLAGS) -dc -Xptxas -O4 -Xcompiler -O4 
-NVFLAGS_DEBUG = $(_NVFLAGS) -lineinfo -Xcompiler -Wall -Xptxas -Werror 
+_NVFLAGS = -ccbin /usr/bin/g++-11 --gpu-architecture=$(CU_COMPUTE_ARCH) --gpu-code=$(CU_ARCH) --default-stream per-thread $(INCLUDES) -MMD -MP -dc
+NVFLAGS = $(_NVFLAGS) -Xptxas -O4 -Xcompiler -O4  -lineinfo
+NVFLAGS_DEBUG = $(_NVFLAGS) -G -g
+
+NVFLAGS=$(NVFLAGS_DEBUG)
 
 
 # Linker flags
@@ -40,6 +42,7 @@ CPP_OBJECTS_TARGET1 = src/buildIndex.o \
 		      src/hashKMer.o \
 		      src/loadKMerIndex.o
 CPP_OBJECTS_TARGET2 = src/loadKMerIndex.o \
+		      src/timer.o \
 		      src/fastmap.o \
 		      src/main.o \
 		      src/FMI_wrapper.o \
@@ -47,7 +50,7 @@ CPP_OBJECTS_TARGET2 = src/loadKMerIndex.o \
 		      src/utils.o \
 		      src/kopen.o \
 		      src/memcpy_bwamem.o \
-			  src/pipeline.o
+		      src/pipeline.o
 
 C_OBJECTS = $(C_SOURCES:.c=.o)
 
@@ -86,7 +89,7 @@ all: depend $(TARGET1) $(TARGET2)
 $(TARGET1): $(CPP_OBJECTS_TARGET1)
 	$(CXX) $(LINKFLAGS) -o $@ $^ -lz
 
-$(TARGET2): $(CU_OBJECTS_LINKER) $(CU_OBJECTS) $(CPP_OBJECTS_TARGET2) $(C_OBJECTS_TARGET2)
+$(TARGET2): $(CPP_OBJECTS_TARGET2) $(C_OBJECTS_TARGET2) $(CU_OBJECTS_LINKER) $(CU_OBJECTS) 
 	$(CXX) $(LINKFLAGS) -L. -o $@ $^ $(LIBS) 
 
 $(TARGET2_DEBUG): $(CU_DEBUG_OBJECTS_LINKER) $(CU_DEBUG_OBJECTS) $(CPP_OBJECTS_TARGET2)

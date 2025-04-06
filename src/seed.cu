@@ -1,6 +1,6 @@
 #include "bwa.h"
 #include "macro.h"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 
 #include "fmindex.cuh"
 #include <string.h>
@@ -14,37 +14,41 @@
 //
 
 // forward declaration
-__device__ void preseedOnePos(const fmIndex *fmIndex, int readLen, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
+__device__ void preseedOnePos(const fmIndex *fmIndex, int read_len, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
 
-__device__ void preseedOnePos2(const fmIndex *fmIndex, int readLen, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
+__device__ void preseedOnePos2(const fmIndex *fmIndex, int read_len, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
 
-__device__ void preseedOnePosBackward(const fmIndex *fmIndex, int readLen, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
+__device__ void preseedOnePosBackward(const fmIndex *fmIndex, int read_len, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
 
-__device__ void preseedOnePos2Backward(const fmIndex *fmIndex, int readLen, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
+__device__ void preseedOnePos2Backward(const fmIndex *fmIndex, int read_len, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab);
 
 __global__ void preseedAndFilterV2(
         const fmIndex  *devFmIndex,
         const mem_opt_t *d_opt, 
-        const bseq1_t *d_seqs, 
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         smem_aux_t *d_aux, 			// aux output
         kmers_bucket_t *d_kmerHashTab,
         void *d_buffer_pools)
 {
-    char *read;             // read sequence for this block
+    int seq_id = blockIdx.x;
+    const uint8_t *read;
     int minSeedLen;     // option: minimum seed length
     int64_t sentinelIndex; // index: sentinel index
     int m, n; // local var
-    int readLen; // read sequence length
+    int read_len; // read sequence length
 
-    read = d_seqs[blockIdx.x].seq; 		// seqID is blockIdx.x
-    readLen = d_seqs[blockIdx.x].l_seq;	// read length
+    int seq_offset = d_seq_offset[seq_id];
+    int seq_offset_next = d_seq_offset[seq_id + 1];
+    read = d_seq + seq_offset;
+    read_len = seq_offset_next - seq_offset;
     minSeedLen = d_opt->min_seed_len;
 
     __shared__ bwtintv_t sharedPreSeeds[MAX_LEN_READ];
     __shared__ uint8_t sharedRead[MAX_LEN_READ];
-    for (int j = threadIdx.x; j<readLen; j+=blockDim.x)
+    for (int j = threadIdx.x; j<read_len; j+=blockDim.x)
     {
-        sharedRead[j] = (uint8_t)read[j];
+        sharedRead[j] = read[j];
         sharedPreSeeds[j].info = 0;
     }
     __syncthreads(); __syncwarp();
@@ -52,24 +56,16 @@ __global__ void preseedAndFilterV2(
 
     // Collect preSeed = read[m..n]
     // n loop is parallelized.
-    for(n = minSeedLen - 1 + threadIdx.x; n < readLen; n += blockDim.x)
+    for(n = minSeedLen - 1 + threadIdx.x; n < read_len; n += blockDim.x)
     {
-        preseedOnePos2Backward(devFmIndex, readLen, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
+        preseedOnePos2Backward(devFmIndex, read_len, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
     }
     __syncthreads(); __syncwarp();
 
-    /*
-    if(blockIdx.x >= 19990 && threadIdx.x == 0) {
-        for(int k = 0; k < readLen; k++) {
-            bwtintv_t preseed = sharedPreSeeds[k];
-            //printf("[DEBUG_ %d] %d info %lu m %d n %d, bool %d\n", blockIdx.x, k, preseed.info, M(preseed), N(preseed), (bool)(preseed.info));
-        }
-    }
-    */
 
     // Inspect in parallel 
 	__shared__ bool sharedIsSeed[MAX_LEN_READ];
-    for(n = threadIdx.x; n < readLen - 1; n += blockDim.x)
+    for(n = threadIdx.x; n < read_len - 1; n += blockDim.x)
     {
         // TODO do other inspection: longID, frac_Rep also here 
         sharedIsSeed[n] = (bool)(sharedPreSeeds[n].info);
@@ -82,28 +78,20 @@ __global__ void preseedAndFilterV2(
 
     // Gather sequentially
     if(threadIdx.x==0) {
-        sharedIsSeed[readLen - 1] = (bool)(sharedPreSeeds[readLen - 1].info);
+        sharedIsSeed[read_len - 1] = (bool)(sharedPreSeeds[read_len - 1].info);
 
-        /*
-        if(blockIdx.x >= 19990) {
-            for(int k = 0; k < readLen; k++) {
-                //printf("[DEBUG_ %d] %d sharedIsSeed %d\n", blockIdx.x, k, sharedIsSeed[k]);
-            }
-        }
-        */
-
-        int numSeeds = 0;
-        for(n = 0; n < readLen; n++) {
+        int num_seeds = 0;
+        for(n = 0; n < read_len; n++) {
             if(sharedIsSeed[n]) {
-                numSeeds++;
+                num_seeds++;
             }
         }
-		d_aux[blockIdx.x].mem.n = numSeeds;
+		d_aux[blockIdx.x].mem.n = num_seeds;
         
         void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x % 32);
-        bwtintv_t *gm_seeds = (bwtintv_t*)CUDAKernelMalloc(d_buffer_ptr, sizeof(bwtintv_t) * numSeeds, sizeof(bwtintv_t));
+        bwtintv_t *gm_seeds = (bwtintv_t*)CUDAKernelMalloc(d_buffer_ptr, sizeof(bwtintv_t) * num_seeds, sizeof(bwtintv_t));
         int j = 0;
-        for(n = 0; n < readLen; n++)
+        for(n = 0; n < read_len; n++)
         {
             if(sharedIsSeed[n])
             {
@@ -111,7 +99,7 @@ __global__ void preseedAndFilterV2(
             }
         }
 
-        //printf("DEBUG num_seeds %d\n", numSeeds);
+        //printf("DEBUG num_seeds %d\n", num_seeds);
         d_aux[blockIdx.x].mem.a = gm_seeds;
     }
 }
@@ -128,14 +116,14 @@ __global__ void preseedAndFilter(
     int minSeedLen;     // option: minimum seed length
     int64_t sentinelIndex; // index: sentinel index
     int m, n; // local var
-    int readLen; // read sequence length
+    int read_len; // read sequence length
 
-    read = d_seqs[blockIdx.x].seq; 		// seqID is blockIdx.x
-    readLen = d_seqs[blockIdx.x].l_seq;	// read length
+    read = d_seqs[blockIdx.x].seq; 		// seq_id is blockIdx.x
+    read_len = d_seqs[blockIdx.x].l_seq;	// read length
     minSeedLen = d_opt->min_seed_len;
 
     __shared__ uint8_t sharedRead[MAX_LEN_READ];
-    for (int j = threadIdx.x; j<readLen; j+=blockDim.x)
+    for (int j = threadIdx.x; j<read_len; j+=blockDim.x)
     {
         sharedRead[j] = (uint8_t)read[j];
     }
@@ -145,15 +133,15 @@ __global__ void preseedAndFilter(
     __shared__ bwtintv_t sharedPreSeeds[MAX_LEN_READ];
     // Collect preSeed = read[m..n]
     // n loop is parallelized.
-    for(n = minSeedLen - 1 + threadIdx.x; n < readLen; n += blockDim.x)
+    for(n = minSeedLen - 1 + threadIdx.x; n < read_len; n += blockDim.x)
     {
-        preseedOnePos2Backward(devFmIndex, readLen, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
+        preseedOnePos2Backward(devFmIndex, read_len, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
     }
     __syncthreads(); __syncwarp();
 
     // Inspect in parallel 
 	__shared__ bool sharedIsSeed[MAX_LEN_READ];
-    for(n = threadIdx.x; n < readLen - 1; n += blockDim.x)
+    for(n = threadIdx.x; n < read_len - 1; n += blockDim.x)
     {
         // TODO do other inspection: longID, frac_Rep also here 
         sharedIsSeed[n] = (bool)(sharedPreSeeds[n].info);
@@ -166,18 +154,18 @@ __global__ void preseedAndFilter(
 
     // Gather sequentially
     if(threadIdx.x==0){
-        sharedIsSeed[readLen - 1] = (bool)(sharedPreSeeds[readLen - 1].info);
+        sharedIsSeed[read_len - 1] = (bool)(sharedPreSeeds[read_len - 1].info);
         bwtintv_t *seeds = d_aux[blockIdx.x].mem.a;
-        int numSeeds = 0;
-        for(n = 0; n < readLen; n++)
+        int num_seeds = 0;
+        for(n = 0; n < read_len; n++)
         {
             if(sharedIsSeed[n])
             {
-                seeds[numSeeds] = sharedPreSeeds[n];
-                numSeeds++;
+                seeds[num_seeds] = sharedPreSeeds[n];
+                num_seeds++;
             }
         }
-		d_aux[blockIdx.x].mem.n = numSeeds;
+		d_aux[blockIdx.x].mem.n = num_seeds;
     }
 }
 
@@ -195,10 +183,10 @@ __global__ void preseed(
     int minSeedLen;     // option: minimum seed length
     int64_t sentinelIndex; // index: sentinel index
     int m, n; // local var
-    int readLen; // read sequence length
+    int read_len; // read sequence length
 
-    read = d_seqs[blockIdx.x].seq; 		// seqID is blockIdx.x
-    readLen = d_seqs[blockIdx.x].l_seq;	// read length
+    read = d_seqs[blockIdx.x].seq; 		// seq_id is blockIdx.x
+    read_len = d_seqs[blockIdx.x].l_seq;	// read length
     auxOutput = &d_aux[blockIdx.x];
     minSeedLen = d_opt->min_seed_len;
 
@@ -206,7 +194,7 @@ __global__ void preseed(
     __shared__ uint8_t sharedRead[MAX_LEN_READ];
     __shared__ bwtintv_t *sharedPreSeeds;
 
-    for (int j = threadIdx.x; j<readLen; j+=blockDim.x)
+    for (int j = threadIdx.x; j<read_len; j+=blockDim.x)
     {
         sharedRead[j] = (uint8_t)read[j];
     }
@@ -230,22 +218,22 @@ __global__ void preseed(
 
 #ifdef FORWARD
     // m loop is parallelized.
-    for (m = threadIdx.x; m <= readLen - minSeedLen; m += blockDim.x){
+    for (m = threadIdx.x; m <= read_len - minSeedLen; m += blockDim.x){
 #ifdef STRIDED
-        preseedOnePos2(devFmIndex, readLen, sharedRead, m, minSeedLen, sharedPreSeeds, d_kmerHashTab);
+        preseedOnePos2(devFmIndex, read_len, sharedRead, m, minSeedLen, sharedPreSeeds, d_kmerHashTab);
 #else
-        preseedOnePos(devFmIndex, readLen, sharedRead, m, minSeedLen, sharedPreSeeds, d_kmerHashTab);
+        preseedOnePos(devFmIndex, read_len, sharedRead, m, minSeedLen, sharedPreSeeds, d_kmerHashTab);
 #endif
     }
 #else
     // n loop is parallelized.
-    //for(n = readLen - 1 - threadIdx.x; n >= minSeedLen - 1; n -= blockDim.x)
-    for(n = minSeedLen - 1 + threadIdx.x; n < readLen; n += blockDim.x)
+    //for(n = read_len - 1 - threadIdx.x; n >= minSeedLen - 1; n -= blockDim.x)
+    for(n = minSeedLen - 1 + threadIdx.x; n < read_len; n += blockDim.x)
     {
 #ifdef STRIDED
-        preseedOnePos2Backward(devFmIndex, readLen, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
+        preseedOnePos2Backward(devFmIndex, read_len, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
 #else
-        preseedOnePosBackward(devFmIndex, readLen, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
+        preseedOnePosBackward(devFmIndex, read_len, sharedRead, n, minSeedLen, sharedPreSeeds, d_kmerHashTab);
 #endif
     }
 #endif
@@ -253,7 +241,7 @@ __global__ void preseed(
 
 
 // Collect a preSeed = read[m..n]
-__device__ void preseedOnePos(const fmIndex *fmIndex, int readLen, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab)
+__device__ void preseedOnePos(const fmIndex *fmIndex, int read_len, const uint8_t *read, int m, int min_seed_len, bwtintv_t *preSeeds, kmers_bucket_t *d_kmersHashTab)
 {
     uint64_t *oneHot = fmIndex->oneHot;
     int64_t *count = fmIndex->count;
@@ -276,7 +264,7 @@ __device__ void preseedOnePos(const fmIndex *fmIndex, int readLen, const uint8_t
     smem.x[2] = count[read[m] + 1] - count[read[m]];
 
     int n;
-    for(n = m; n < readLen - 1; ++n) // try extending read[n + 1]
+    for(n = m; n < read_len - 1; ++n) // try extending read[n + 1]
     {
         if(read[n + 1] >= 4) // always terminate at ambiguous base 'N'
         {
@@ -305,7 +293,7 @@ __device__ void preseedOnePos(const fmIndex *fmIndex, int readLen, const uint8_t
 }
 
 // Collect a preseed = read[m..n]
-__device__ void preseedOnePos2(const fmIndex *fmIndex, int readLen, const uint8_t *read, int m, int minSeedLen, bwtintv_t *preseeds, kmers_bucket_t *d_kmersHashTab)
+__device__ void preseedOnePos2(const fmIndex *fmIndex, int read_len, const uint8_t *read, int m, int minSeedLen, bwtintv_t *preseeds, kmers_bucket_t *d_kmersHashTab)
 {
     uint64_t *oneHot = fmIndex->oneHot;
     int64_t *count = fmIndex->count;
@@ -330,7 +318,7 @@ __device__ void preseedOnePos2(const fmIndex *fmIndex, int readLen, const uint8_
 
     int n;
     uint8_t base0, base1;
-    for(n = m; n < readLen - 2; n+=2) // extend to the most forward
+    for(n = m; n < read_len - 2; n+=2) // extend to the most forward
     {
         base0 = read[n + 1];
         base1 = read[n + 2];
@@ -374,10 +362,10 @@ __device__ void preseedOnePos2(const fmIndex *fmIndex, int readLen, const uint8_
                     }
             }
     }
-    if(n == readLen - 2)
+    if(n == read_len - 2)
     {
         oldSmem = smem;
-        FORWARD_EXT(smem, read[readLen - 1]);
+        FORWARD_EXT(smem, read[read_len - 1]);
             if(smem.x[2] < minIntervalSize)
             {
                 smem = oldSmem;
@@ -402,7 +390,7 @@ __device__ void preseedOnePos2(const fmIndex *fmIndex, int readLen, const uint8_
 }
 
 // Collect a preSeed = read[m..n]
-__device__ void preseedOnePosBackward(const fmIndex *fmIndex, int readLen, const uint8_t *read, int n, int minSeedLen, bwtintv_t *preseeds, kmers_bucket_t *d_kmersHashTab)
+__device__ void preseedOnePosBackward(const fmIndex *fmIndex, int read_len, const uint8_t *read, int n, int minSeedLen, bwtintv_t *preseeds, kmers_bucket_t *d_kmersHashTab)
 {
     uint64_t *oneHot = fmIndex->oneHot;
     int64_t *count = fmIndex->count;
@@ -463,7 +451,7 @@ __device__ void preseedOnePosBackward(const fmIndex *fmIndex, int readLen, const
 }
 
 // Collect a preseed = read[m..n]
-__device__ void preseedOnePos2Backward(const fmIndex *fmIndex, int readLen, const uint8_t *read, int n, int minSeedLen, bwtintv_t *preseeds, kmers_bucket_t *d_kmersHashTab)
+__device__ void preseedOnePos2Backward(const fmIndex *fmIndex, int read_len, const uint8_t *read, int n, int minSeedLen, bwtintv_t *preseeds, kmers_bucket_t *d_kmersHashTab)
 {
     uint64_t *oneHot = fmIndex->oneHot;
     int64_t *count = fmIndex->count;
@@ -562,7 +550,7 @@ __device__ void removeForward(
 	smem_aux_t *d_aux
 	)
 {
-	// seqID = blockIdx.x
+	// seq_id = blockIdx.x
 	bwtintv_t *preSeeds = d_aux[blockIdx.x].mem.a;
 	int numPreSeeds = d_aux[blockIdx.x].mem.n;
     int pos; // = m = qbeg
@@ -581,16 +569,16 @@ __device__ void removeForward(
 
     if(threadIdx.x==0){
         bwtintv_t *seeds = preSeeds;
-        int numSeeds = 0;
+        int num_seeds = 0;
         for(pos = 0; pos < numPreSeeds; pos++)
         {
             if(sharedIsSeed[pos])
             {
-                seeds[numSeeds] = seeds[pos];
-                numSeeds++;
+                seeds[num_seeds] = seeds[pos];
+                num_seeds++;
             }
         }
-		d_aux[blockIdx.x].mem.n = numSeeds;
+		d_aux[blockIdx.x].mem.n = num_seeds;
 		d_aux[blockIdx.x].mem.a = seeds;
     }
 }
@@ -600,7 +588,7 @@ __device__ void removeBackward(
 	smem_aux_t *d_aux
 	)
 {
-	// seqID = blockIdx.x
+	// seq_id = blockIdx.x
 	bwtintv_t *preseeds = d_aux[blockIdx.x].mem.a;
 	int numPreSeeds = d_aux[blockIdx.x].mem.n;
 
@@ -620,16 +608,16 @@ __device__ void removeBackward(
     // Gather sequentially
     if(threadIdx.x==0){
         bwtintv_t *seeds = preseeds;
-        int numSeeds = 0;
+        int num_seeds = 0;
         for(n = 0; n < numPreSeeds; n++)
         {
             if(sharedIsSeed[n])
             {
-                seeds[numSeeds] = seeds[n];
-                numSeeds++;
+                seeds[num_seeds] = seeds[n];
+                num_seeds++;
             }
         }
-		d_aux[blockIdx.x].mem.n = numSeeds;
+		d_aux[blockIdx.x].mem.n = num_seeds;
 		d_aux[blockIdx.x].mem.a = seeds;
     }
 }
@@ -640,27 +628,27 @@ __device__ void removeBackward(
 //
 
 __device__ void reseedOnePos(const fmIndex *fmIndex, const uint8_t *sharedRead, \
-        int readLen, int pos, int minSeedLen, int minInterval,\
-        bwtintv_t* p, int *numSeeds2, void *d_buffer_pools);
+        int read_len, int pos, int minSeedLen, int minInterval,\
+        bwtintv_t* p, int *num_seeds2, void *d_buffer_pools);
 
 __device__ void reseedThirdRound(const fmIndex *fmIndex, const uint8_t *sharedRead, \
-        int readLen, int minSeedLen, int maxIntervalSize,\
-        bwtintv_t *seeds, int *numSeeds3);
+        int read_len, int minSeedLen, int maxIntervalSize,\
+        bwtintv_t *seeds, int *num_seeds3);
 
 
 __global__ void reseedV2(
         const fmIndex *devFmIndex,
         const mem_opt_t *d_opt, 
-        const bseq1_t *d_seqs, 
+        uint8_t *d_seq,
+        int *d_seq_offset,
         smem_aux_t *d_aux, 			// aux output
         kmers_bucket_t *d_kmerHashTab,
         void * d_buffer_pools,
         int num_reads
         )
 {
-    // gatekeeping
-    int readID = blockDim.x * blockIdx.x + threadIdx.x;
-    if(readID >= num_reads)
+    int seq_id = blockDim.x * blockIdx.x + threadIdx.x;
+    if(seq_id >= num_reads)
     {
         return;
     }
@@ -681,8 +669,11 @@ __global__ void reseedV2(
     bwtintv_t *smem;
     int split_len, split_intv;
     int k;
-    uint8_t *read = (uint8_t*)d_seqs[readID].seq;
-    read_len = d_seqs[readID].l_seq;
+    int seq_offset, seq_offset_next;
+    seq_offset = d_seq_offset[seq_id];
+    seq_offset_next = d_seq_offset[seq_id + 1];
+    read_len = seq_offset_next - seq_offset;
+    const uint8_t *read = d_seq + seq_offset;
 
     uint64_t *oneHot = devFmIndex->oneHot; // DO NOT change names for macros
     int64_t *count = devFmIndex->count;
@@ -691,7 +682,7 @@ __global__ void reseedV2(
     CP_OCC2 *cpOcc2 = devFmIndex->cpOcc2;
     int64_t sentinelIndex = *(devFmIndex->sentinelIndex);
 
-    num_smem = d_aux[readID].mem.n;
+    num_smem = d_aux[seq_id].mem.n;
     split_len = (int)(d_opt->min_seed_len * d_opt->split_factor \
                         + .499); // default: 19 * 1.5 + .499 = 28
     split_intv = d_opt->split_width; // default: 10
@@ -708,15 +699,15 @@ __global__ void reseedV2(
                 sizeof(bwtintv_t) * cap_allseeds, sizeof(bwtintv_t));
         for(int l=0; l<num_allseeds; l++)
         {
-            new_allseeds[l] = d_aux[readID].mem.a[l];
+            new_allseeds[l] = d_aux[seq_id].mem.a[l];
         }
-        d_aux[readID].mem.a = new_allseeds;
-        //d_aux[readID].mem.a[num_allseeds++].x[2] = 0; // separates smem | seed2
+        d_aux[seq_id].mem.a = new_allseeds;
+        //d_aux[seq_id].mem.a[num_allseeds++].x[2] = 0; // separates smem | seed2
     }
 
     for(k = 0; k < num_smem; k++)
     {
-        smem = d_aux[readID].mem.a + k;
+        smem = d_aux[seq_id].mem.a + k;
         if(PLEN(smem) < split_len || smem->x[2] > split_intv) // not long
         {
             continue;
@@ -724,11 +715,10 @@ __global__ void reseedV2(
         // reseed
         min_seed_intv = smem->x[2] + 1;
         pivot_pos = (PM(smem) + PN(smem) + 1) >> 1;
-        /*
-        if(pivot_pos > 250){
-            printf("pivot_pos %d\n", pivot_pos);
+        if(pivot_pos > 77){ // FIXME
+            //printf("pivot_pos %d\n", pivot_pos);
+            continue;
         }
-        */
         if(read[pivot_pos] >=4)
         {
             continue;
@@ -891,20 +881,20 @@ __global__ void reseedV2(
                     sizeof(bwtintv_t) * (num_allseeds + num_seeds) << 1, sizeof(bwtintv_t));
             for(int l=0; l<num_allseeds; l++)
             {
-                new_allseeds[l] = d_aux[readID].mem.a[l];
+                new_allseeds[l] = d_aux[seq_id].mem.a[l];
             }
             cap_allseeds = (num_allseeds + num_seeds) << 1;
-            d_aux[readID].mem.a = new_allseeds;
+            d_aux[seq_id].mem.a = new_allseeds;
         }
 
         for(int l=0; l<num_seeds; l++)
         {
-            d_aux[readID].mem.a[num_allseeds++] = seeds[l];
+            d_aux[seq_id].mem.a[num_allseeds++] = seeds[l];
         }
     }
 
     // reallocate memory to store reseeded seeds
-    max_num_seed3 = d_seqs[readID].l_seq / (d_opt->min_seed_len + 1) + 1;
+    max_num_seed3 = read_len / (d_opt->min_seed_len + 1) + 1;
     if(num_allseeds + max_num_seed3 + 1 > cap_allseeds) 
     {
         bwtintv_t *new_allseeds;
@@ -912,14 +902,14 @@ __global__ void reseedV2(
                 sizeof(bwtintv_t) * (num_allseeds + max_num_seed3 + 1), sizeof(bwtintv_t));
         for(int l=0; l<num_allseeds; l++)
         {
-            new_allseeds[l] = d_aux[readID].mem.a[l];
+            new_allseeds[l] = d_aux[seq_id].mem.a[l];
         }
-        d_aux[readID].mem.a = new_allseeds;
+        d_aux[seq_id].mem.a = new_allseeds;
 
         // separates seed2 | seed3
-        //d_aux[readID].mem.a[num_allseeds++].x[2] = 0;
+        //d_aux[seq_id].mem.a[num_allseeds++].x[2] = 0;
     }
-    d_aux[readID].mem.n = num_allseeds;
+    d_aux[seq_id].mem.n = num_allseeds;
 }
 
 
@@ -934,17 +924,17 @@ void reseedParallel(
         void * d_buffer_pools
         )
 {
-    int readID = blockIdx.x;
-    bwtintv_t *seeds = d_aux[readID].mem.a; 
+    int seq_id = blockIdx.x;
+    bwtintv_t *seeds = d_aux[seq_id].mem.a; 
     int minSeedLen = d_opt->min_seed_len;
     int splitLen = (int)(d_opt->min_seed_len * d_opt->split_factor + .499);
     int splitWidth = d_opt->split_width;
-    int readLen = d_seqs[readID].l_seq;
+    int read_len = d_seqs[seq_id].l_seq;
 
     int seedID;
-    //bwtintv_t *seeds2 = d_aux[readID].mem1.a; 
-    int numSeeds = d_aux[readID].mem.n;
-    if(numSeeds > MAX_LEN_READ)
+    //bwtintv_t *seeds2 = d_aux[seq_id].mem1.a; 
+    int num_seeds = d_aux[seq_id].mem.n;
+    if(num_seeds > MAX_LEN_READ)
     {
         return;
     }
@@ -953,9 +943,9 @@ void reseedParallel(
     __shared__ int sharedNumSeeds2[MAX_LEN_READ];
     __shared__ bwtintv_t* sharedSeed2Heads[MAX_LEN_READ];
 
-	for(int j = threadIdx.x; j<readLen; j+=blockDim.x)
+	for(int j = threadIdx.x; j<read_len; j+=blockDim.x)
     {
-		sharedRead[j] = (uint8_t)d_seqs[readID].seq[j];
+		sharedRead[j] = (uint8_t)d_seqs[seq_id].seq[j];
     }
 	__syncthreads(); __syncwarp();
 
@@ -964,7 +954,7 @@ void reseedParallel(
     int seedLen;
     bool isLong;
     int minIntervals, pos, count;
-    for(seedID = threadIdx.x; seedID < numSeeds; seedID += blockDim.x)
+    for(seedID = threadIdx.x; seedID < num_seeds; seedID += blockDim.x)
     {
         seedLen = (uint32_t)(seeds[seedID].info) - (uint32_t)(seeds[seedID].info >> 32);
         isLong = seedLen >= splitLen && seeds[seedID].x[2] <= splitWidth;
@@ -980,7 +970,7 @@ void reseedParallel(
 		//void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
 		//bwtintv_t *p = (bwtintv_t*)CUDAKernelMalloc(d_buffer_ptr, sizeof(bwtintv_t) * 64, 8);
 		bwtintv_t *p = (bwtintv_t*)malloc(sizeof(bwtintv_t) * 64);
-        reseedOnePos(devFmIndex, sharedRead, readLen, pos, minSeedLen, minIntervals, p, &count, d_buffer_pools);
+        reseedOnePos(devFmIndex, sharedRead, read_len, pos, minSeedLen, minIntervals, p, &count, d_buffer_pools);
         sharedNumSeeds2[seedID] = count;
         sharedSeed2Heads[seedID] = (bwtintv_t*)p;
     }
@@ -989,7 +979,7 @@ void reseedParallel(
     bwtintv_t *seeds2;
     if(threadIdx.x == 0)
     {
-        for(seedID = 0; seedID < numSeeds; seedID++)
+        for(seedID = 0; seedID < num_seeds; seedID++)
         {
             count = sharedNumSeeds2[seedID];
             seeds2 = sharedSeed2Heads[seedID];
@@ -998,24 +988,24 @@ void reseedParallel(
                 //printf("[BID %3d] Collected reseeds from seed %4d mem[%2d]: \
                         (%lu, %lu, %lu, %u, %u)\n", blockIdx.x, seedID, j,\
                         mem[j].x[0], mem[j].x[1], mem[j].x[2], M(mem[j]), N(mem[j]));
-                d_aux[blockIdx.x].mem.a[numSeeds++] = seeds2[j];
+                d_aux[blockIdx.x].mem.a[num_seeds++] = seeds2[j];
             }
         }
-        d_aux[blockIdx.x].mem.n = numSeeds;
+        d_aux[blockIdx.x].mem.n = num_seeds;
     }
 }
 
 
 __device__ 
 void reseedOnePos(const fmIndex *fmIndex, const uint8_t *read, \
-        int readLen, int pos, int minSeedLen, int minInterval,\
-        bwtintv_t* p, int *numSeeds2, void *d_buffer_pools)
+        int read_len, int pos, int minSeedLen, int minInterval,\
+        bwtintv_t* p, int *num_seeds2, void *d_buffer_pools)
 {
     bwtintv_t *seeds = p;
 
     if(read[pos] >= 4)
     {
-        *numSeeds2 = 0;
+        *num_seeds2 = 0;
         return;
     }
 
@@ -1038,7 +1028,7 @@ void reseedOnePos(const fmIndex *fmIndex, const uint8_t *read, \
     seed.x[2] = count[read[pos] + 1] - count[read[pos]];
     seed.info = INFO(pos, pos);
 
-    for(n = pos; n < readLen - 1; n++) // collect lep = read[pos..n]
+    for(n = pos; n < read_len - 1; n++) // collect lep = read[pos..n]
     {
         oldSeed = seed;
         if(read[n + 1] >= 4)
@@ -1058,7 +1048,7 @@ void reseedOnePos(const fmIndex *fmIndex, const uint8_t *read, \
             break;
         }
     }
-    if(n == readLen - 1)
+    if(n == read_len - 1)
     {
         seed.info = INFO(pos, n);
         leps[numLeps++] = seed;
@@ -1073,7 +1063,7 @@ void reseedOnePos(const fmIndex *fmIndex, const uint8_t *read, \
     }
 
 
-    int numSeeds = 0;
+    int num_seeds = 0;
     // backward Ext LEPs
     int numOld;
     bwtintv_t longestLep, oldLongestLep;
@@ -1103,11 +1093,11 @@ void reseedOnePos(const fmIndex *fmIndex, const uint8_t *read, \
             if(LEN(oldLongestLep) >= minSeedLen && oldLongestLep.x[2] >= minInterval)
             {
                 oldLongestLep.info = INFO(m, N(longestLep));
-                if(numSeeds == 64)
+                if(num_seeds == 64)
                 {
                     return;
                 }
-                seeds[numSeeds++] = oldLongestLep;
+                seeds[num_seeds++] = oldLongestLep;
             }
             currInterval = -1;
         }
@@ -1132,27 +1122,27 @@ void reseedOnePos(const fmIndex *fmIndex, const uint8_t *read, \
         if(LEN(leps[0]) >= minSeedLen && leps[0].x[2] >= minInterval)
         {
             // NO INFO calc is necessary (since mSL > 1, etc)
-            if(numSeeds == 64)
+            if(num_seeds == 64)
             {
                 return;
             }
-            seeds[numSeeds++] = leps[0];
+            seeds[num_seeds++] = leps[0];
         }
     }
     /*
     printf("All seed2s\n");
-    for(int j=0; j < numSeeds; j++)
+    for(int j=0; j < num_seeds; j++)
     {
         printf("lep[%d] (%lu, %lu, %lu, %d, %d)\n", \
                 j, seeds[j].x[0], seeds[j].x[1], seeds[j].x[2], M(seeds[j]), N(seeds[j]));
     }
     */
-    *numSeeds2 = numSeeds;
+    *num_seeds2 = num_seeds;
 }
 
 __device__ void reseedThirdRound(const fmIndex *fmIndex, const uint8_t *read, \
-        int readLen, int minSeedLen, int maxIntervalSize,\
-        bwtintv_t *seeds, int *numSeeds3)
+        int read_len, int minSeedLen, int maxIntervalSize,\
+        bwtintv_t *seeds, int *num_seeds3)
 {
     uint64_t *oneHot = fmIndex->oneHot;
     int64_t *count = fmIndex->count;
@@ -1163,9 +1153,9 @@ __device__ void reseedThirdRound(const fmIndex *fmIndex, const uint8_t *read, \
 
     int m = 0;
     int n = 0;
-    int numSeeds = 0;
+    int num_seeds = 0;
 
-    while(m < readLen)
+    while(m < read_len)
     {
         int next_m = m + 1;
 
@@ -1178,7 +1168,7 @@ __device__ void reseedThirdRound(const fmIndex *fmIndex, const uint8_t *read, \
             seed.x[1] = count[3 - base];
             seed.x[2] = count[base + 1] - count[base];
 
-            for(n = m + 1; n < readLen; n++)
+            for(n = m + 1; n < read_len; n++)
             {
                 next_m = n + 1;
                 base = (uint8_t)read[n];
@@ -1190,7 +1180,7 @@ __device__ void reseedThirdRound(const fmIndex *fmIndex, const uint8_t *read, \
                         if(seed.x[2] > 0)
                         {
                             seed.info = INFO(m,n);
-                            seeds[numSeeds++] = seed;
+                            seeds[num_seeds++] = seed;
                         }
                         break;
                     }
@@ -1203,7 +1193,7 @@ __device__ void reseedThirdRound(const fmIndex *fmIndex, const uint8_t *read, \
         }
         m = next_m;
     }
-    *numSeeds3 = numSeeds;
+    *num_seeds3 = num_seeds;
 }
 
 //
@@ -1227,12 +1217,12 @@ __global__ void sa2ref(
 	mem_seed_v *seedsAllReads	// output
 	)
 {
-    int readID = blockIdx.x;
-    bwtintv_t *fatSeeds = d_aux[readID].mem.a;
-    int numFatSeeds = d_aux[readID].mem.n;
+    int seq_id = blockIdx.x;
+    bwtintv_t *fatSeeds = d_aux[seq_id].mem.a;
+    int numFatSeeds = d_aux[seq_id].mem.n;
     uint64_t maxIntervalSize = d_opt->max_occ;
 
-    bwtintv_t *seeds = d_aux[readID].mem1.a;
+    bwtintv_t *seeds = d_aux[seq_id].mem1.a;
 
     __shared__ uint64_t sharedCounts[MAX_NUM_SEEDS];
     __shared__ int sharedSteps[MAX_NUM_SEEDS];
@@ -1311,7 +1301,7 @@ __global__ void sortSeeds_low(
 	mem_seed_v *seedsAllReadsSortingBuffer
 	)
 {
-	// seqID = blockIdx.x
+	// seq_id = blockIdx.x
 	int n_seeds = seedsAllReads[blockIdx.x].n;
 	if (n_seeds==0) return;
 	if (n_seeds>SORTSEEDSLOW_MAX_NSEEDS) return;
@@ -1362,7 +1352,7 @@ __global__ void sortSeeds_high(
 	mem_seed_v *seedsAllReadsSortingBuffer
 	)
 {
-	// seqID = blockIdx.x
+	// seq_id = blockIdx.x
 	int n_seeds = seedsAllReads[blockIdx.x].n;
 	if (n_seeds<=SORTSEEDSLOW_MAX_NSEEDS) return;
 
@@ -1421,7 +1411,7 @@ __global__ void separateSeeds(
     void* d_buffer_pools
 	)
 {
-	// seqID = blockIdx.x
+	// seq_id = blockIdx.x
 	bwtintv_t *mem_a = d_aux[blockIdx.x].mem.a;
 	int n_mem = d_aux[blockIdx.x].mem.n;
 	int max_occ = d_opt->max_occ;	// max length of an interval that we can count
@@ -1525,23 +1515,36 @@ __global__ void separateSeeds(
 }
 #endif
 
-// calculate necessary SMEM3
-__global__ void reseedLastRound(const fmIndex *devFmIndex, const mem_opt_t *d_opt, const bseq1_t *d_seqs, smem_aux_t *d_aux, kmers_bucket_t *d_kmerHashTab, int numReads)
+__global__ void reseedLastRound(
+        const fmIndex *devFmIndex,
+        const mem_opt_t *d_opt,
+        uint8_t *d_seq,
+        int *d_seq_offset,
+        smem_aux_t *d_aux,
+        kmers_bucket_t *d_kmerHashTab,
+        int numReads)
 {
-    int readID = blockIdx.x * blockDim.x + threadIdx.x;
-    if(readID >= numReads)
+    int seq_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if(seq_id >= numReads)
     { 
         return;
     }
 
-    int numSeeds, numSeeds3;
-    numSeeds = d_aux[readID].mem.n;
-    bwtintv_t *seeds3 = d_aux[readID].mem.a + numSeeds;
-    uint8_t *read = (uint8_t*)d_seqs[readID].seq;
-    int readLen = d_seqs[readID].l_seq;
+    int num_seeds, num_seeds3;
+    num_seeds = d_aux[seq_id].mem.n;
+    bwtintv_t *seeds3 = d_aux[seq_id].mem.a + num_seeds;
+
+    const uint8_t *read;
+    int read_len;
+
+    int seq_offset = d_seq_offset[seq_id];
+    int seq_offset_next = d_seq_offset[seq_id + 1];
+    read = d_seq + seq_offset;
+    read_len = seq_offset_next - seq_offset;
+
     int minSeedLen = d_opt->min_seed_len + 1;
     int maxIntervalSize = d_opt->max_mem_intv;
-    reseedThirdRound(devFmIndex, read, readLen, minSeedLen, maxIntervalSize, \
-            seeds3, &numSeeds3);
-    d_aux[readID].mem.n = numSeeds + numSeeds3;
+    reseedThirdRound(devFmIndex, read, read_len, minSeedLen, maxIntervalSize, \
+            seeds3, &num_seeds3);
+    d_aux[seq_id].mem.n = num_seeds + num_seeds3;
 }

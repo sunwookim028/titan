@@ -2,11 +2,11 @@
 #define _AUX_CUH
 
 #include "bwa.h"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 #include "bwt_CUDA.cuh"
 #include "bntseq.h"
 #include <string.h>
-#include "streams.cuh"
+#include "cuda_wrapper.h"
 #include "macro.h"
 #include "hashKMerIndex.h"
 #include "seed.cuh"
@@ -28,7 +28,8 @@ using namespace std;
 __global__ void MEMFINDING_collect_intv_kernel(
         const mem_opt_t *d_opt, 
         const bwt_t *d_bwt, 
-        const bseq1_t *d_seqs, 
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         smem_aux_t *d_aux, 			// aux output
         kmers_bucket_t *d_kmerHashTab,
         void* d_buffer_pools);
@@ -52,7 +53,8 @@ __global__ void saLookup(
         const mem_opt_t *d_opt,
         const bwt_t *d_bwt,
         const bntseq_t *d_bns,
-        const bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         smem_aux_t *d_aux,
         mem_seed_v *d_seq_seeds,	// output
         void *d_buffer_pools
@@ -86,7 +88,8 @@ Notations:
 __global__ void SEEDCHAINING_chain_kernel(
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_seed_v *d_seq_seeds,
         mem_chain_v *d_chains,	// output
         void *d_buffer_pools
@@ -99,9 +102,11 @@ __global__ void SEEDCHAINING_chain_kernel(
 // 
 //
 __global__ void BTreeChaining(
+        int batch_size,
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_seed_v *d_seq_seeds,
         mem_chain_v *d_chains,	// output
         void *d_buffer_pools
@@ -175,7 +180,8 @@ __global__ void ExtendingPairGenerate(
         const mem_opt_t *d_opt,
         bntseq_t *d_bns,
         uint8_t *d_pac,
-        const bseq1_t* d_seqs,
+        uint8_t *d_seq,
+        int *d_seq_offset,
         mem_chain_v *d_chains, 
         mem_alnreg_v *d_regs,
         seed_record_t *d_seed_records,
@@ -262,6 +268,7 @@ __global__ void sortRegions(
    - flag = 0x4
  */
 __global__ void FINALIZEALN_preprocessing1_kernel(
+        int batch_size,
         mem_alnreg_v* d_regs,
         mem_aln_v * d_alns,
         seed_record_t *d_seed_records,
@@ -283,7 +290,8 @@ __global__ void FINALIZEALN_preprocessing1_kernel(
 
 __global__ void FINALIZEALN_preprocessing2_kernel(
         const mem_opt_t *d_opt,
-        const bseq1_t *d_seqs,
+        uint8_t *d_seq,
+        int *d_seq_offset,
         const uint8_t *d_pac,
         const bntseq_t *d_bns,
         mem_alnreg_v* d_regs,
@@ -335,7 +343,8 @@ __global__ void traceback(
 __global__ void finalize(
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        const bseq1_t *d_seqs, 
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_alnreg_v *d_regs,
         mem_aln_v *d_alns,
         seed_record_t *d_seed_records,
@@ -354,7 +363,8 @@ outputs:
 __global__ void SAMGEN_aln2sam_finegrain_kernel(
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        const bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_aln_v *d_alns,
         seed_record_t *d_seed_records,
         int Nseeds,
@@ -371,7 +381,8 @@ __global__ void SAMGEN_aln2sam_finegrain_kernel(
  */
 __global__ void SAMGEN_concatenate_kernel(
         mem_aln_v *d_alns,
-        bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         int n_seqs,
         char* d_seq_sam_ptr, int *d_seq_sam_size
         );

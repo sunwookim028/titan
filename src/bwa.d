@@ -53,7 +53,7 @@ src/bwa.o : src/bwa.cu \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
-    src/CUDAKernel_memmgnt.cuh \
+    src/gmem_alloc.h \
     src/ksw.h \
     src/bwa.h \
     src/bwt.h \
@@ -168,7 +168,7 @@ ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/gmem_alloc.h:
 
 src/ksw.h:
 

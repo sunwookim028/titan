@@ -1,5 +1,5 @@
 #include "kbtree_CUDA.cuh"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 __device__ kbtree_chn_t *kb_init_chn(int size, void* CUDAKernel_buffer)		
 {																	
 	kbtree_chn_t *b;											

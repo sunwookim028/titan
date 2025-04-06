@@ -1,6 +1,6 @@
 #include "ksw.h"
 #include "macro.h"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 
 __device__ const kswr_t g_defr = { 0, -1, -1, -1, -1, -1, -1 };
 

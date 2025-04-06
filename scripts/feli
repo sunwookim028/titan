@@ -1,0 +1,2 @@
+k_cnt=$1;
+./g3 mem -g 1 -l $k_cnt -i 1 -z 1 -F 1 -Z 80000 -o testing.sam /datasets/bwa/ref/ecoli/GCA_000005845.2_ASM584v2_genomic.fna /datasets/bwa/reads/ecoli/SRR31728524.fastq

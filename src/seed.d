@@ -57,7 +57,7 @@ src/seed.o : src/seed.cu \
     src/bwt.h \
     src/hashKMerIndex.h \
     src/macro.h \
-    src/CUDAKernel_memmgnt.cuh \
+    src/gmem_alloc.h \
     src/fmindex.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/cub.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/config.cuh \
@@ -428,7 +428,7 @@ src/hashKMerIndex.h:
 
 src/macro.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/gmem_alloc.h:
 
 src/fmindex.cuh:
 

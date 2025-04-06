@@ -18,4 +18,7 @@ void final_pack_compact(int batch_size, mem_aln_v *d_alnvecs,
         int *d_aln_offsets, int *d_cigar_offsets,
         int *d_rids, uint64_t *d_pos, uint32_t *cigars);
 
+__global__
+void final_pack(int batch_size, int* d_alns_offset, int* d_rid, uint64_t* d_pos);
+
 #endif

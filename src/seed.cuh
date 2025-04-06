@@ -9,7 +9,16 @@ using namespace std;
 extern uint64_t proc_freq;
 
 __global__ void preseedAndFilter(const fmIndex *devFmIndex, const mem_opt_t *d_opt, const bseq1_t *d_seqs, smem_aux_t *d_aux, kmers_bucket_t *d_kmerHashTab);
-__global__ void preseedAndFilterV2(const fmIndex *devFmIndex, const mem_opt_t *d_opt, const bseq1_t *d_seqs, smem_aux_t *d_aux, kmers_bucket_t *d_kmerHashTab, void *d_buffer_pools);
+
+
+__global__ void preseedAndFilterV2(
+        const fmIndex  *devFmIndex,
+        const mem_opt_t *d_opt, 
+        const uint8_t *d_seq,
+        int *d_seq_offset,
+        smem_aux_t *d_aux, 			// aux output
+        kmers_bucket_t *d_kmerHashTab,
+        void *d_buffer_pools);
 
 /* find the SMEM starting at each position of the read 
 	for each position, only extend to the right
@@ -24,10 +33,26 @@ __global__ void filterSeeds( const mem_opt_t *d_opt, smem_aux_t *d_aux);
 // calculate necessary SMEM2 
 __global__ void reseed(const fmIndex *devFmIndex, const mem_opt_t *d_opt, const bseq1_t *d_seqs, smem_aux_t *d_aux, kmers_bucket_t *d_kmerHashTab, void *d_buffer_pools);
 
-__global__ void reseedV2(const fmIndex *devFmIndex, const mem_opt_t *d_opt, const bseq1_t *d_seqs, smem_aux_t *d_aux, kmers_bucket_t *d_kmerHashTab, void *d_buffer_pools, int num_reads);
+__global__ void reseedV2(
+        const fmIndex *devFmIndex,
+        const mem_opt_t *d_opt, 
+        uint8_t *d_seq,
+        int *d_seq_offset,
+        smem_aux_t *d_aux, 			// aux output
+        kmers_bucket_t *d_kmerHashTab,
+        void * d_buffer_pools,
+        int num_reads
+        );
 
 // calculate necessary SMEM3
-__global__ void reseedLastRound(const fmIndex *devFmIndex, const mem_opt_t *d_opt, const bseq1_t *d_seqs, smem_aux_t *d_aux, kmers_bucket_t *d_kmerHashTab, int numReads);
+__global__ void reseedLastRound(
+        const fmIndex *devFmIndex,
+        const mem_opt_t *d_opt,
+        uint8_t *d_seq,
+        int *d_seq_offset,
+        smem_aux_t *d_aux,
+        kmers_bucket_t *d_kmerHashTab,
+        int numReads);
 
 
 /* for each seed:

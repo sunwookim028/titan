@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "bwt.h"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 #include "hashKMerIndex.h"
 
 typedef struct // same as bwtintv_t, but use 32-bit for query position (info)

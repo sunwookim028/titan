@@ -2,6 +2,40 @@
 #include "macro.h"
 #include <cub/cub.cuh>
 
+#define ALN_PER_READ 2
+__global__
+void final_pack(int batch_size, int* d_alns_offset, int* d_rid, uint64_t* d_pos)
+{
+    int read_id = blockDim.x * blockIdx.x + threadIdx.x;
+    if(read_id >= batch_size) return;
+
+    /*
+    for(mem_aln_t *aln = d_alnvecs[readID].a;\
+            aln < d_alnvecs[readID].a + d_alnvecs[readID].n; aln++) {
+        printf("%s %d %s %ld ", phasename[type], readID+1, d_bns->anns[aln->rid].name, aln->pos+1); //1-based rpos
+        for(uint32_t *bam = aln->cigar; bam < aln->cigar + aln->n_cigar;\
+                bam++) {
+            printf("%d%c", BAM2LEN(*bam), BAM2OP(*bam));
+        }
+        printf("\n");
+    }
+    if(d_alnvecs[readID].n == 0) {
+        printf("%d -1 -1\n", readID+1);
+    }
+    */
+
+    int offset = read_id * ALN_PER_READ; //FIXME
+    d_alns_offset[read_id] = offset; 
+    if(read_id == (batch_size - 1)){
+        d_alns_offset[read_id + 1] = offset + ALN_PER_READ;
+    }
+
+    for(int k=0; k < ALN_PER_READ; k++){
+        d_rid[offset + k] = read_id * 1000 + k * 100 + 28;
+        d_pos[offset + k] = (uint64_t)(read_id * 1000 + k * 100 + 19);
+    }
+}
+
 __global__
 void project_aln_cnts(int batch_size, mem_aln_v *d_alnvecs,
         int *d_aln_cnts)

@@ -9,3 +9,5 @@ log
 temp*
 .nfs*
 .depend
+*.d
+*.sif

@@ -50,16 +50,18 @@ src/bwamem.o : src/bwamem.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    src/streams.cuh \
+    src/cuda_wrapper.h \
     src/hashKMerIndex.h \
     src/bwt.h \
     src/bwa.h \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
-    src/CUDAKernel_memmgnt.cuh \
-    src/utils_CUDA.cuh \
+    src/pipeline.h \
+    src/concurrentqueue.h \
     src/macro.h \
+    src/gmem_alloc.h \
+    src/utils_CUDA.cuh \
     src/timer.h \
     src/bwt_CUDA.cuh \
     src/fastmap.h \
@@ -752,7 +754,7 @@ src/bwamem.o : src/bwamem.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-src/streams.cuh:
+src/cuda_wrapper.h:
 
 src/hashKMerIndex.h:
 
@@ -766,11 +768,15 @@ ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/pipeline.h:
 
-src/utils_CUDA.cuh:
+src/concurrentqueue.h:
 
 src/macro.h:
+
+src/gmem_alloc.h:
+
+src/utils_CUDA.cuh:
 
 src/timer.h:
 

@@ -1,5 +1,5 @@
 #include "bntseq.h"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 #include "ksw.h"
 #include "kstring_CUDA.cuh"
 

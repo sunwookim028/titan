@@ -1,13 +1,13 @@
 #include "kbtree_CUDA.cuh"
 #include "bwa.h"
-#include "CUDAKernel_memmgnt.cuh"
+#include "gmem_alloc.h"
 #include "bwt_CUDA.cuh"
 #include "bntseq.h"
 #include "ksort_CUDA.h"
 #include "ksw.h"
 #include "kstring_CUDA.cuh"
 #include <string.h>
-#include "streams.cuh"
+#include "cuda_wrapper.h"
 #include "macro.h"
 #include "hashKMerIndex.h"
 #include "seed.cuh"
@@ -1308,16 +1308,16 @@ __device__ int mem_matesw(const mem_opt_t *opt, const bntseq_t *bns, const uint8
 __global__ void MEMFINDING_collect_intv_kernel(
         const mem_opt_t *d_opt, 
         const bwt_t *d_bwt, 
-        const bseq1_t *d_seqs, 
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         smem_aux_t *d_aux, 			// aux output
         kmers_bucket_t *d_kmerHashTab,
         void* d_buffer_pools)
 {
     // seqID = blockIdx.x
-    char *seq1; int l_seq;
     int j;	// position on read to process
-    seq1 = d_seqs[blockIdx.x].seq; 		// get read from global mem
-    l_seq  = d_seqs[blockIdx.x].l_seq;	// read length
+    const uint8_t *seq1 = d_seq + d_seq_offset[blockIdx.x];
+    int l_seq = d_seq_offset[blockIdx.x + 1] - d_seq_offset[blockIdx.x];
     smem_aux_t* a = &d_aux[blockIdx.x];	// aux output for this read
     int min_seed_len = d_opt->min_seed_len;
     if (l_seq < min_seed_len){ 	// if the query is shorter than the seed length, no match
@@ -1327,6 +1327,7 @@ __global__ void MEMFINDING_collect_intv_kernel(
         }
         return;
     }
+
 
     // cache read in shared mem
     extern __shared__ int SM[];
@@ -1344,7 +1345,7 @@ __global__ void MEMFINDING_collect_intv_kernel(
         a->mem.n = a->mem.m;
         a->mem.a = S_mem_a[0];
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     bwtintv_t *mem_a = S_mem_a[0];
 
     // extend to the right and find the longest seed
@@ -1380,7 +1381,8 @@ __global__ void saLookup(
         const mem_opt_t *d_opt,
         const bwt_t *d_bwt,
         const bntseq_t *d_bns,
-        const bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         smem_aux_t *d_aux,
         mem_seed_v *d_seq_seeds,	// output
         void *d_buffer_pools
@@ -1390,39 +1392,52 @@ __global__ void saLookup(
     bwtintv_t *intvs = d_aux[seqID].mem.a;
     int num_intvs = d_aux[seqID].mem.n;
 
-    __shared__ int offsets[MAX_LEN_READ + 1];
+    __shared__ int s_offsets[MAX_LEN_READ + 1];
+    __shared__ mem_seed_t *seed_a;
+    __shared__ int *offsets;
     if(threadIdx.x == 0) {
-        int num_seeds = 0;
+        void *buf = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x % 32);
+        int num_seeds;
         int k;
+        offsets = (int*)s_offsets;
+        if(num_intvs > MAX_LEN_READ + 1){ // realloc for outliers.
+            offsets = (int*)CUDAKernelMalloc(buf, sizeof(int) * (num_intvs + 1), 8);
+        }
+
+        num_seeds = 0;
         for(k = 0; k < num_intvs; k++) { 
             offsets[k] = num_seeds;
             num_seeds += intvs[k].x[2] > d_opt->max_occ ? d_opt->max_occ : intvs[k].x[2];
         }
         offsets[k] = num_seeds;
 
-        void *buf = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x % 32);
-        d_seq_seeds[seqID].a = (mem_seed_t*)CUDAKernelMalloc(buf, num_seeds * sizeof(mem_seed_t), 8);
+        seed_a = d_seq_seeds[seqID].a = (mem_seed_t*)CUDAKernelMalloc(buf, num_seeds * sizeof(mem_seed_t), 8);
         d_seq_seeds[seqID].n = num_seeds;
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
 
     // collect seeds from each intervals
-    for(int k = threadIdx.x; k < num_intvs; k += blockDim.x) {
-        int intv_size = intvs[k].x[2] > d_opt->max_occ ? d_opt->max_occ : intvs[k].x[2];
-        int step_size = intvs[k].x[2] > d_opt->max_occ ? intvs[k].x[2] / d_opt->max_occ : 1;
-        int seedlen = LEN(intvs[k]);
-        int qbeg = M(intvs[k]);
-        uint64_t sa_k_ = intvs[k].x[0];
-        int64_t rbeg;
+    int intv_id;
+    int intv_size, step_size;
+    bwtintv_t *intv;
+    int offset;
+    for(intv_id = threadIdx.x; intv_id < num_intvs; intv_id += blockDim.x) {
+        intv = &intvs[intv_id];
+        offset = offsets[intv_id];
+        intv_size = offsets[intv_id + 1] - offset;
+        step_size = intv->x[2] > d_opt->max_occ ? intv->x[2] / d_opt->max_occ : 1;
 
         for(int j = 0; j < intv_size; j++) {
-            uint64_t sa_k = sa_k_ + step_size * j;
-            //printf("SA_K [%d] %lu\n", seqID, sa_k);
-            rbeg = bwt_sa_gpu(d_bwt, sa_k);
-            d_seq_seeds[seqID].a[offsets[k] + j].rbeg = rbeg;
-            d_seq_seeds[seqID].a[offsets[k] + j].qbeg = qbeg;
-            d_seq_seeds[seqID].a[offsets[k] + j].len = d_seq_seeds[seqID].a[offsets[k] + j].score = seedlen;
-            d_seq_seeds[seqID].a[offsets[k] + j].rid = bns_intv2rid_gpu(d_bns, rbeg, rbeg + seedlen);
+            mem_seed_t new_seed;
+            bwtint_t k = intv->x[0] + step_size * j;
+            if(k<0 || k>d_bwt->seq_len){
+                continue;
+            }
+            new_seed.rbeg = bwt_sa_gpu(d_bwt, k);
+            new_seed.qbeg = M(*intv);
+            new_seed.len = new_seed.score = LEN(*intv);
+            new_seed.rid = bns_intv2rid_gpu(d_bns, new_seed.rbeg, new_seed.rbeg + new_seed.len);
+            seed_a[offset++] = new_seed;
         }
     }
 }
@@ -1460,7 +1475,7 @@ __global__ void sortSeedsLowDim(
         void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
         s_seed_arrB = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
 
     // (1/2) sort by (effectively qe) (len)
     for(int i=0; i<SORTSEEDSLOW_NKEYS_THREAD; i++){
@@ -1484,7 +1499,7 @@ __global__ void sortSeedsLowDim(
         }
         s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     __syncwarp();
 
     // (2/2) sort by qb
@@ -1539,7 +1554,7 @@ __global__ void sortSeedsHighDim(
         void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
         s_seed_arrB = (mem_seed_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_seed_t), 8);
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     __syncwarp();
 
     // (1/2) sort by qe
@@ -1564,7 +1579,7 @@ __global__ void sortSeedsHighDim(
         }
         s_seed_arrB[new_pos] = seed_arrA[thread_values[i]];
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     __syncwarp();
 
     // (2/2) sort by qb
@@ -1616,7 +1631,8 @@ Notations:
 __global__ void SEEDCHAINING_chain_kernel(
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_seed_v *d_seq_seeds,
         mem_chain_v *d_chains,	// output
         void *d_buffer_pools
@@ -1629,7 +1645,10 @@ __global__ void SEEDCHAINING_chain_kernel(
         return;
     }
     mem_seed_t *seed_a = d_seq_seeds[blockIdx.x].a;	// seed array
-    int l_seq = d_seqs[blockIdx.x].l_seq;
+    int seq_id = blockIdx.x;
+    int seq_offset = d_seq_offset[seq_id];
+    int seq_offset_next = d_seq_offset[seq_id + 1];
+    int l_seq = seq_offset_next - seq_offset;
 
     __shared__ int16_t S_preceding_seed[SORTSEEDSHIGH_MAX_NSEEDS];
     __shared__ int S_suceeding_seed[SORTSEEDSHIGH_MAX_NSEEDS];
@@ -1668,7 +1687,7 @@ __global__ void SEEDCHAINING_chain_kernel(
             }
         }
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     // check the pairs of suceeding-preceeding. if unmatch, make seed head of chain
     for (int j=threadIdx.x+1; j<n_seeds&&j<SORTSEEDSHIGH_MAX_NSEEDS; j+=blockDim.x){
         if (S_preceding_seed[j]==-1) continue;
@@ -1676,7 +1695,7 @@ __global__ void SEEDCHAINING_chain_kernel(
             S_preceding_seed[j] = j;	// make seed j head of chain
     }
 
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     __syncwarp();
     if(threadIdx.x == 0){
         for(int k=0; k<n_seeds; k++){
@@ -1695,7 +1714,7 @@ __global__ void SEEDCHAINING_chain_kernel(
         S_chain_a[0] = (mem_chain_t*)CUDAKernelMalloc(d_buffer_ptr, n_seeds*sizeof(mem_chain_t), 8);
         S_n_chains[0] = 0;
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, (blockIdx.x+threadIdx.x)%32);
     mem_chain_t *chain_a = S_chain_a[0];
     for (int i=threadIdx.x; i<n_seeds&&i<SORTSEEDSHIGH_MAX_NSEEDS; i+=blockDim.x){	// i = seedID
@@ -1725,7 +1744,7 @@ __global__ void SEEDCHAINING_chain_kernel(
             chain_a[chainID].seeds = chain_seeds;
         }
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
 
     // write output
     if (threadIdx.x==0){
@@ -1749,15 +1768,18 @@ __global__ void SEEDCHAINING_chain_kernel(
 // 
 //
 __global__ void BTreeChaining(
+        int batch_size,
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        bseq1_t *d_seqs,
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_seed_v *d_seq_seeds,
         mem_chain_v *d_chains,	// output
         void *d_buffer_pools
         )
 {
     int seqID = blockIdx.x * blockDim.x + threadIdx.x;
+    if(seqID >= batch_size) return;
     int n_seeds = d_seq_seeds[seqID].n;
     if (n_seeds==0){
         d_chains[seqID].n = 0;
@@ -1822,7 +1844,7 @@ __global__ void sortChainsDecreasingWeight(mem_chain_v* d_chains, void* d_buffer
     // if (blockIdx.x!=3921) return;
     // int seqID = blockIdx.x;
     int n_chn = d_chains[blockIdx.x].n;
-    if (n_chn==0) return;
+    if (n_chn==0 || n_chn > 3072) return;
     void* d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
     mem_chain_t* a = d_chains[blockIdx.x].a;	// array of chains
 
@@ -1840,14 +1862,14 @@ __global__ void sortChainsDecreasingWeight(mem_chain_v* d_chains, void* d_buffer
         else
             w[i] = 0;
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     uint32_t thread_keys[NKEYS_EACH_THREAD];	// weight array on each thread
     int thread_values[NKEYS_EACH_THREAD];		// chain's index array before sorting
     for (int k=0; k<NKEYS_EACH_THREAD; k++){
         thread_values[k] = threadIdx.x*NKEYS_EACH_THREAD+k;
         thread_keys[k] = w[threadIdx.x*NKEYS_EACH_THREAD+k];
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     // sort weights
     typedef cub::BlockRadixSort<uint32_t, SORTCHAIN_BLOCKDIMX, NKEYS_EACH_THREAD, int> BlockRadixSort;
     BlockRadixSort().SortDescending(thread_keys, thread_values);
@@ -1861,7 +1883,7 @@ __global__ void sortChainsDecreasingWeight(mem_chain_v* d_chains, void* d_buffer
         *new_a_SM = (mem_chain_t*)CUDAKernelMalloc(d_buffer_ptr, n_chn*sizeof(mem_chain_t), 8);
         d_chains[blockIdx.x].a = *new_a_SM;
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     mem_chain_t* new_a = *new_a_SM;
     for (int k=0; k<n_iter; k++){
         int i = k*blockDim.x + threadIdx.x;	// chainID to work on
@@ -1892,8 +1914,9 @@ __global__ void CHAINFILTERING_filter_kernel(
     if (n_chn == 0) return; // no need to filter
     if (threadIdx.x>=n_chn) return;	// don't run padded threads
     if (n_chn>MAX_N_CHAIN){
-        printf("ABORT n_chn(%d) > MAX_N_CHAIN(%d)\n", n_chn, MAX_N_CHAIN);
-        __trap();
+        //printf("ABORT n_chn(%d) > MAX_N_CHAIN(%d)\n", n_chn, MAX_N_CHAIN);
+        return;
+        //__trap();
     }
 
     extern __shared__ int SM[];		// dynamic shared mem
@@ -1916,7 +1939,7 @@ __global__ void CHAINFILTERING_filter_kernel(
             SET_IS_ALT(i, a[i].is_alt);
         }
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
 
     // pairwise compare algorithm
     for (int k=0; k<n_iter; k++){	// each thread anchor on n_iter chains
@@ -1947,7 +1970,7 @@ __global__ void CHAINFILTERING_filter_kernel(
                 SET_KEPT(i, 3);
         } // keep looping until the kept outcome is certain
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
 
     // do accounting of which chain is kept 
     uint16_t* new_n_chn = chn_w_SM;		// chn_w_SM  now hold new n_chn
@@ -1963,7 +1986,7 @@ __global__ void CHAINFILTERING_filter_kernel(
         void* d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, blockIdx.x%32);
         *new_a_SM = (mem_chain_t*)CUDAKernelMalloc(d_buffer_ptr, new_n_chn[0]*sizeof(mem_chain_t), 8);
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     // save to global data
     n_chn = new_n_chn[0];
     mem_chain_t* new_a = *new_a_SM;
@@ -2065,19 +2088,19 @@ __global__ void SWSeed(
     int j = 0;	// start+j will be the offset on d_seed_records, j is regID
     for (int i=0; i<chn_n; i++){	// i is chainID
         if (chn_a[i].n==0) continue;
-        // prepare each seed on the chain
-        for (int k=0; k<chn_a[i].n; k++){	// k is seedID
-                                            // write basic info to seed records
-            d_seed_records[start+j].seqID = seqID;
-            d_seed_records[start+j].chainID = (uint16_t)i;
-            d_seed_records[start+j].seedID = (uint16_t)k;
-            d_seed_records[start+j].regID = (uint16_t)j;
+        // start+j == batch-level
+        for (int k=0; k<chn_a[i].n; k++){
+            d_seed_records[start+j].seqID = seqID; //input idx
+            d_seed_records[start+j].chainID = (uint16_t)i;// chain idx
+            d_seed_records[start+j].seedID = (uint16_t)k; //chain-level
+            d_seed_records[start+j].regID = (uint16_t)j; //input-level
             j++;
         }	
     }
 
     // allocate regs vector
     d_regs[seqID].n = d_regs[seqID].m = n_seeds;
+    //printf("swseed %d %d\n", seqID, n_seeds);
     d_regs[seqID].a = (mem_alnreg_t*)CUDAKernelCalloc(d_buffer_ptr, n_seeds, sizeof(mem_alnreg_t), 8);
 }
 
@@ -2095,7 +2118,8 @@ __global__ void ExtendingPairGenerate(
         const mem_opt_t *d_opt,
         bntseq_t *d_bns,
         uint8_t *d_pac,
-        const bseq1_t* d_seqs,
+        uint8_t *d_seq,
+        int *d_seq_offset,
         mem_chain_v *d_chains, 
         mem_alnreg_v *d_regs,
         seed_record_t *d_seed_records,
@@ -2105,7 +2129,6 @@ __global__ void ExtendingPairGenerate(
         )
 {
     int i = blockIdx.x*blockDim.x+threadIdx.x;	// seed index on d_seed_records
-    if(blockIdx.x==21301 && threadIdx.x==14) return;
     if (i>=d_Nseeds[0]) return;
     void* d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, threadIdx.x%32);
     // pull seed info
@@ -2114,8 +2137,10 @@ __global__ void ExtendingPairGenerate(
     int seedID = (int)d_seed_records[i].seedID;
     int regID = (int)d_seed_records[i].regID;	// location of output on d_regs[seqID].a
                                                 // pull seq info
-    int l_seq = d_seqs[seqID].l_seq;
-    uint8_t *seq = (uint8_t*)d_seqs[seqID].seq;
+    int seq_offset = d_seq_offset[seqID];
+    int seq_offset_next = d_seq_offset[seqID + 1];
+    int l_seq = seq_offset_next - seq_offset;
+    uint8_t *seq = d_seq + seq_offset;
     // pull seed
     mem_chain_t *chain = &(d_chains[seqID].a[chainID]);
     mem_seed_t *seed = &(chain->seeds[seedID]);
@@ -2417,7 +2442,7 @@ __global__ void filterRegions(
         if (a[i].score < d_opt->T) S_kept_aln[i] = 0;
         else S_kept_aln[i] = 1;
     }
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     for (int iter=0; iter<n_iter; iter++){
         int i = iter*blockDim.x + threadIdx.x; // anchor point
         if (i>n) break;
@@ -2457,6 +2482,7 @@ __global__ void filterRegions(
         }
         d_regs[blockIdx.x].n = m;
     }
+    __syncthreads(); __syncwarp();
     // check is_alt
     for (int iter=0; iter<n_iter; iter++){
         int i = iter*blockDim.x + threadIdx.x; // anchor point
@@ -2465,6 +2491,7 @@ __global__ void filterRegions(
         if (p->rid >= 0 && d_bns->anns[p->rid].is_alt)
             p->is_alt = 1;
     }
+    __syncthreads(); __syncwarp();
     { // primary marking TODO
         // seqID = blockIdx.x
         int n = d_regs[blockIdx.x].n;	// n alignments
@@ -2605,6 +2632,7 @@ __global__ void sortRegions(
    - flag = 0x4
  */
 __global__ void FINALIZEALN_preprocessing1_kernel(
+        int batch_size,
         mem_alnreg_v* d_regs,
         mem_aln_v * d_alns,
         seed_record_t *d_seed_records,
@@ -2612,6 +2640,7 @@ __global__ void FINALIZEALN_preprocessing1_kernel(
         void* d_buffer_pools)
 {
     int seqID = blockIdx.x*blockDim.x + threadIdx.x;
+    if(seqID >= batch_size) return;
     // allocate mem_aln_t array
     int n_aln = d_regs[seqID].n;
 
@@ -2662,7 +2691,8 @@ __global__ void FINALIZEALN_preprocessing1_kernel(
 
 __global__ void FINALIZEALN_preprocessing2_kernel(
         const mem_opt_t *d_opt,
-        const bseq1_t *d_seqs,
+        uint8_t *d_seq,
+        int *d_seq_offset,
         const uint8_t *d_pac,
         const bntseq_t *d_bns,
         mem_alnreg_v* d_regs,
@@ -2685,7 +2715,9 @@ __global__ void FINALIZEALN_preprocessing2_kernel(
     int64_t re = d_regs[seqID].a[alnID].re; 
     int qb = d_regs[seqID].a[alnID].qb;
     int qe = d_regs[seqID].a[alnID].qe;
-    uint8_t *query = (uint8_t*)&(d_seqs[seqID].seq[qb]);
+    uint8_t *query;
+    int seq_offset = d_seq_offset[seqID];
+    query = d_seq + seq_offset + qb;
     int l_query = qe - qb;
     int64_t rlen;
     int64_t l_pac = d_bns->l_pac;
@@ -2936,7 +2968,8 @@ __global__ void traceback(
 __global__ void finalize(
         const mem_opt_t *d_opt,
         const bntseq_t *d_bns,
-        const bseq1_t *d_seqs, 
+        const uint8_t *d_seq,
+        int *d_seq_offset,
         mem_alnreg_v *d_regs,
         mem_aln_v *d_alns,
         seed_record_t *d_seed_records,
@@ -2973,7 +3006,11 @@ __global__ void finalize(
         }
     }
     // add clipping to cigar
-    int qb = ar->qb; int qe = ar->qe; int l_query = d_seqs[seqID].l_seq;
+    int seq_offset = d_seq_offset[seqID];
+    int seq_offset_next = d_seq_offset[seqID + 1];
+    int l_query = seq_offset_next - seq_offset;
+
+    int qb = ar->qb; int qe = ar->qe; 
     if (qb != 0 || qe != l_query) {
         void *d_buffer_ptr = CUDAKernelSelectPool(d_buffer_pools, threadIdx.x%32);
         int clip5, clip3;
@@ -3144,17 +3181,17 @@ __global__ void SAMGEN_concatenate_kernel(
     // then add them up at block level
     __shared__ int S_total_l_sams[1];
     if (threadIdx.x==0) S_total_l_sams[0] = 0;
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     int l_sams = 0;
     for (int i=0; i<n_aln; i++)
         l_sams+=a[i].rid;
     l_sams++;	// add 1 for the terminating NULL
     int thread_offset = atomicAdd(&S_total_l_sams[0], l_sams);
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     // now add the block's total to d_seq_sam_size
     __shared__ int S_block_offset[1];
     if (threadIdx.x==0) S_block_offset[0] = atomicAdd(d_seq_sam_size, S_total_l_sams[0]);
-    __syncthreads();
+    __syncthreads(); __syncwarp();
     int offset = S_block_offset[0] + thread_offset;	// actual offset on d_seq_sam_ptr
                                                     // record offset to sam
     d_seqs[seqID].sam = (char*)(offset);

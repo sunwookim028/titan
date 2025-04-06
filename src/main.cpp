@@ -1,7 +1,9 @@
 // Main function.
 #include <stdio.h>
 #include <iostream>
+#include <thread>
 #include <string.h>
+#include "cuda_wrapper.h"
 
 int main_mem(int argc, char *argv[]);
 

@@ -50,7 +50,7 @@ src/kstring_CUDA.o : src/kstring_CUDA.cu \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/crt/cudacc_ext.h \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    src/CUDAKernel_memmgnt.cuh \
+    src/gmem_alloc.h \
     src/kstring_CUDA.cuh
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
@@ -155,6 +155,6 @@ src/kstring_CUDA.o : src/kstring_CUDA.cu \
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/gmem_alloc.h:
 
 src/kstring_CUDA.cuh:

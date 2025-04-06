@@ -57,12 +57,14 @@ src/aux.o : src/aux.cu \
     ext/zlib-1.3.1/zconf.h \
     src/bwt.h \
     src/hashKMerIndex.h \
-    src/CUDAKernel_memmgnt.cuh \
+    src/gmem_alloc.h \
     src/bwt_CUDA.cuh \
     src/ksort_CUDA.h \
     src/ksw.h \
     src/kstring_CUDA.cuh \
-    src/streams.cuh \
+    src/cuda_wrapper.h \
+    src/pipeline.h \
+    src/concurrentqueue.h \
     src/macro.h \
     src/seed.cuh \
     /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cub/cub.cuh \
@@ -765,7 +767,7 @@ src/bwt.h:
 
 src/hashKMerIndex.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/gmem_alloc.h:
 
 src/bwt_CUDA.cuh:
 
@@ -775,7 +777,11 @@ src/ksw.h:
 
 src/kstring_CUDA.cuh:
 
-src/streams.cuh:
+src/cuda_wrapper.h:
+
+src/pipeline.h:
+
+src/concurrentqueue.h:
 
 src/macro.h:
 

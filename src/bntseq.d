@@ -53,7 +53,7 @@ src/bntseq.o : src/bntseq.cu \
     src/bntseq.h \
     ext/zlib-1.3.1/zlib.h \
     ext/zlib-1.3.1/zconf.h \
-    src/CUDAKernel_memmgnt.cuh
+    src/gmem_alloc.h
 
 /usr/local/cuda-12.1/bin/../targets/x86_64-linux/include/cuda_runtime.h:
 
@@ -163,4 +163,4 @@ ext/zlib-1.3.1/zlib.h:
 
 ext/zlib-1.3.1/zconf.h:
 
-src/CUDAKernel_memmgnt.cuh:
+src/gmem_alloc.h:

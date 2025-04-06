@@ -192,8 +192,12 @@ typedef struct{
     int num_use_gpus;
     int verbosity; // messaging level
     int baseline; // align with baseline options
+    int step_count; // (debug) run only the first @ steps
     long int print_mask;
     int batch_size;
+    bool bound_load_queue; // limit the load queue size.
+    int single_record_bytes;
+    int monitoring_period;
 } g3_opt_t;
 
 
@@ -376,6 +380,16 @@ typedef struct {
     uint32_t *d_alns_cigar_offset;     // cigar offset per aln. ID: alnID
     int *d_alns_cigar;     // cigars per aln. ID: cigar offset & len.
 
+    uint8_t *h_seq;
+    int *h_seq_offset;
+
+    uint8_t *d_seq;
+    int *d_seq_offset;
+
+    int *d_rid;
+    int *d_aln_offsets;
+    uint64_t *d_pos;
+    int *d_chunk_aln_count;
 } process_data_t;
 
 // alignment results for a batch.
