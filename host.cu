@@ -258,7 +258,7 @@ void filewriter(std::ostream *samout, double *walltime)
         * PULL (ALIGNMENT)
             - rid, pos, cigar.
  */
-void pipeline(ktp_aux_t *aux, g3_opt_t *g3_opt)
+void legacy_pipeline(ktp_aux_t *aux, g3_opt_t *g3_opt)
 {
     struct timespec start, end;
     double walltime_initialize, walltime_process, walltime_cleanup;

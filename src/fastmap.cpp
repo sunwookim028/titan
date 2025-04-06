@@ -34,6 +34,7 @@
 #include <string.h>
 #include <limits.h>
 #include <cfloat>
+#include <cerrno>
 #include <ctype.h>
 #include <math.h>
 #include "macro.h"
@@ -52,8 +53,10 @@ KHASH_MAP_INIT_STR(str, int)
 
 float tprof[MAX_NUM_GPUS][MAX_NUM_STEPS];
 extern unsigned char nst_nt4_table[256];
+
+#include "pipeline.h"
 	
-extern void pipeline(ktp_aux_t *aux, g3_opt_t *g3_opt);
+//extern void pipeline(pipeline_aux_t *aux, g3_opt_t *g3_opt);
 
 g3_opt_t *g3_opt_init()
 {
@@ -408,11 +411,11 @@ int main_mem(int argc, char *argv[])
 	gzFile fp, fp2 = 0;
 	char *p, *rg_line = 0, *hdr_line = 0;
 	const char *mode = 0;
-	void *ko = 0, *ko2 = 0;
+	//void *ko = 0, *ko2 = 0;
 	mem_pestat_t pes[4];
-	ktp_aux_t aux;
+	pipeline_aux_t aux;
 
-	memset(&aux, 0, sizeof(ktp_aux_t));
+	memset(&aux, 0, sizeof(pipeline_aux_t));
     std::ofstream samfile;
     std::string samfilepath;
     aux.samout = &std::cout;
@@ -420,16 +423,22 @@ int main_mem(int argc, char *argv[])
 	memset(pes, 0, 4 * sizeof(mem_pestat_t));
 	for (i = 0; i < 4; ++i) pes[i].failed = 1;
 
-    int loading_factor = 1;
+
+    aux.load_thread_cnt = 4;
+    aux.dispatch_thread_cnt = 4;
+
+    int load_chunk_bytes_factor = 512;
     g3_opt_t *g3_opt = g3_opt_init();
 	aux.opt = opt = mem_opt_init();
 	memset(&opt0, 0, sizeof(mem_opt_t));
-	while ((c = getopt(argc, argv, "51qpbaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:F:T:Q:D:m:I:N:o:f:W:x:G:g:l:h:y:K:X:H:Z:")) >= 0) {
+	while ((c = getopt(argc, argv, "51qpbaMCSPVYjuk:c:v:s:r:t:i:z:R:A:B:O:E:U:w:L:d:F:T:Q:D:m:I:N:o:f:W:x:G:g:l:h:y:K:X:H:Z:")) >= 0) {
 		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
 		else if (c == 'b') g3_opt->baseline = 1;
 		else if (c == '1') no_mt_io = 1;
 		else if (c == 'x') mode = optarg;
-		else if (c == 'F') loading_factor = atoi(optarg); 
+		else if (c == 'F') load_chunk_bytes_factor = atoi(optarg); 
+		else if (c == 'i') aux.load_thread_cnt = atoi(optarg);
+		else if (c == 'z') aux.dispatch_thread_cnt = atoi(optarg);
 		else if (c == 'w') opt->w = atoi(optarg), opt0.w = 1;
 		else if (c == 'A') opt->a = atoi(optarg), opt0.a = 1;
 		else if (c == 'B') opt->b = atoi(optarg), opt0.b = 1;
@@ -653,6 +662,15 @@ int main_mem(int argc, char *argv[])
 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
 			aux.idx->bns->anns[i].is_alt = 0;
 
+
+    // input fastq file
+    fd = open(argv[optind], O_RDONLY);
+    if (fd < 0) {
+        std::cerr << "* Error opening file: " << argv[optind] << "\n";
+        return 1;
+    }
+    aux.fd_input = fd;
+/*
     // initiate read loader
 	ko = kopen(argv[optind], &fd);
 	if (ko == 0) {
@@ -678,22 +696,22 @@ int main_mem(int argc, char *argv[])
 			opt->flag |= MEM_F_PE;
 		}
 	}
+    */
 
 	//bwa_print_sam_hdr(aux.idx->bns, hdr_line); 
 
     // storage loading batch size
-	//aux.actual_loading_batch_size = fixed_loading_batch_size > 0? fixed_loading_batch_size : opt->loading_batch_size * opt->n_threads;
-	aux.loading_batch_size = g3_opt->batch_size * g3_opt->num_use_gpus * loading_factor;
-    fprintf(stderr, "* per GPU batch size = %d\n", g3_opt->batch_size);
-    fprintf(stderr, "* storage loading factor %d\n", loading_factor);
-    fprintf(stderr, "* storage loading batch size %ld\n", aux.loading_batch_size);
-
+	aux.load_chunk_bytes = g3_opt->batch_size * g3_opt->num_use_gpus * load_chunk_bytes_factor;
+    fprintf(stderr, "* per GPU batch size (count) = %d\n", g3_opt->batch_size);
+    fprintf(stderr, "* storage loading chunk size (bytes) = %ld\n", aux.load_chunk_bytes);
 
     struct timespec start, end;
     double walltime;
 
+    aux.g3_opt = g3_opt;
     clock_gettime(CLOCK_REALTIME,  &start);
-	pipeline(&aux, g3_opt);
+    pipeline(&aux);
+	//legacy_pipeline(&aux, g3_opt);
     clock_gettime(CLOCK_REALTIME,  &end);
 
     walltime = (end.tv_sec - start.tv_sec) +\
@@ -804,11 +822,14 @@ int main_mem(int argc, char *argv[])
 	free(opt);
     free(g3_opt);
 	bwa_idx_destroy(aux.idx);
-	kseq_destroy(aux.ks);
-	gzclose(fp); kclose(ko);
+	//kseq_destroy(aux.ks);
+	gzclose(fp); 
+    /*
+    kclose(ko);
 	if (aux.ks2) {
 		kseq_destroy(aux.ks2);
 		gzclose(fp2); kclose(ko2);
 	}
+    */
 	return 0;
 }

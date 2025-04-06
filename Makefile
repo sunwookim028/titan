@@ -46,7 +46,8 @@ CPP_OBJECTS_TARGET2 = src/loadKMerIndex.o \
 		      src/FMI_search.o \
 		      src/utils.o \
 		      src/kopen.o \
-		      src/memcpy_bwamem.o
+		      src/memcpy_bwamem.o \
+			  src/pipeline.o
 
 C_OBJECTS = $(C_SOURCES:.c=.o)
 
