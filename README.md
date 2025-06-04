@@ -1,3 +1,5 @@
+**major update coming in a week**
+
 # Accelerating Genomics Analysis with GPUs
 ## Intro.
 ![Modern genomics analysis workflow](/assets/img/teaser.png)
