@@ -13,7 +13,7 @@
 #include "hashKMerIndex.h"
 #include "seed.cuh"
 #include "preprocessing.cuh"
-#include "aux.cuh"
+#include "aux_kernels.cuh"
 #include "final_pack.h"
 
 #include <string.h>
