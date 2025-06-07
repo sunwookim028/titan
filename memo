@@ -1,0 +1,25 @@
+memo.
+  BWA-MEM computes sequence alignment in three stages; seed, chain then extend.
+
+    Seeding computes exact matches between reads and references.
+    Chaining computes sorted groups of seeds for each read sequence.
+    Extending computes Smith-Waterman algorithm for both ends of each seed in the chains of each read, sorts the results to mark the final alignment, then run traceback to obtain the traceback path.
+
+    Seeding: 3 Steps. 
+        First, collect SMEMs using a backward elongation algorithm. Map each thread to collect the maximal elongation ending at each position, then compare to decide the longest match, and mark too long SMEMs. Each block does a read and use shared memory.
+        Second, collect reseeds using the for-back elongation algorithm. THIS PART COULD BE IMPROVED BY A UNIDIRECTIONAL algorithm.
+        Lastly, collect for-seeds using the for elongation algorithm. THIS PART COULD BE IMPROVED USING the complements of reads and back-elongation first for the limiting length tghen filtering afterwards.
+    This yields suffix array intervals of seeds for each read. 
+    => [qb, qe, sa_base, count] X MAX_N_SAI * batch_size
+    => sum(max(thres, count)) seeds per read.
+
+    Chaining: 5(2) Steps.
+        First, collect seeds from each suffix array interval. Map each thread to translate a suffix array entry to a seed. Map each block to a read.
+    => [qb, qe, rpos] * MAX_N_COUNT * MAX_N_SAI * batch_size
+    => Now, SAI array is obsolete.
+        Second, group seeds to create chains. Sort seeds in increasing rpos and iteratively grow b-trees. Then, sort and drop inferior chains.
+
+    Extending: 7(3) Steps.
+        First, create DP pairs and run DP from each seed in each chain. Then, run SW on them. Next, filter out inferior ones, mark primary ones and sort the remaining ones.
+        Second, compute trace-back paths for each final alignments.
+        Finally, coalesce final alignment positions and cigar strings for the batch to transfer.
