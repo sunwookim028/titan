@@ -23,3 +23,4 @@ memo.
         First, create DP pairs and run DP from each seed in each chain. Then, run SW on them. Next, filter out inferior ones, mark primary ones and sort the remaining ones.
         Second, compute trace-back paths for each final alignments.
         Finally, coalesce final alignment positions and cigar strings for the batch to transfer.
+Hey
